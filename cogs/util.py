@@ -22,7 +22,7 @@ class Util(commands.Cog):
         with open('config.json', 'r') as f:
             config = json.load(f)
         
-        config[str(guild.id)] = {'prefix': '!'}
+        config[str(guild.id)] = {'prefix': '!', 'giveaways': {}}
 
         with open('config.json', 'w') as f:
             json.dump(config, f)

@@ -7,7 +7,14 @@ def get_prefix(client, message):
     with open('config.json', 'r') as f:
         config = json.load(f)
     
-    return config[str(message.guild.id)]['prefix']
+    try:
+        prefix = config[str(message.guild.id)]['prefix']
+    except:
+        config[str(message.guild.id)] = {'prefix': '!'}
+        with open('config.json', 'w') as f:
+            json.dump(config, f)
+        prefix = '!'
+    return prefix
 
 client = commands.Bot(command_prefix=get_prefix)
 
@@ -27,18 +34,6 @@ async def reload(ctx, extension):
 for filename in os.listdir('./cogs'):
     if filename.endswith('.py'):
         client.load_extension(f'cogs.{filename[:-3]}')
-
-# @client.command()
-# async def ping(ctx):
-#     await ctx.send(f'Pong! {round(client.latency * 1000)}ms')
-
-# @client.command()
-# async def giveaway(ctx, length, winners, max_players, *, item):
-#     start = time.time()
-#     await ctx.send(f'''Starting giveaway for {item}.\n
-#     Max of {max_players} can enter, and only {winners} can win.\n
-#     Giveaway starts at {start + int(length)}!
-#     ''')
 
 with open('settings.json', 'r') as f:
     token = json.load(f)['token']
