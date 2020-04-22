@@ -99,7 +99,7 @@ class Ranking(commands.Cog):
             embed.add_field(name=mode, value=f'#{data[0]} (LV. {self.get_level(data[1])}) {data[1]} XP', inline=False)
         await ctx.send(embed=embed)
 
-    @commands.command(aliases=['rsm', 'rsearchm', 'rmode'])
+    @commands.command(aliases=['rsm', 'rmode'])
     async def rankings_search_mode(self, ctx, mode, *, name):
         if not mode and mode not in self.ranking_modes:
             await ctx.send(f'Could not find mode.\nAcceptable Modes: {", ".join([m for m in self.ranking_modes.keys()])}')
