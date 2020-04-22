@@ -16,7 +16,7 @@ class Giveaway(commands.Cog):
         self.lock = asyncio.Lock()
         self.check_giveaways.start()
 
-    @tasks.loop(seconds=1)
+    @tasks.loop(seconds=5)
     async def check_giveaways(self):
         await self.client.wait_until_ready()
         with open('config.json', 'r') as f:

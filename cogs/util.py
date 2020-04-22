@@ -43,6 +43,7 @@ class Util(commands.Cog):
         await ctx.send(f'pong | {round(self.client.latency * 1000)}ms')
 
     @commands.command()
+    @commands.has_permissions(administrator=True)
     async def change_prefix(self, ctx, prefix):
         with open('config.json', 'r') as f:
             config = json.load(f)
