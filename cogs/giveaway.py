@@ -8,8 +8,8 @@ import re
 import json
 
 class Giveaway(commands.Cog):
-    def __init__(self, client):
-        self.client = client
+    def __init__(self, bot):
+        self.bot = bot
         self.time_lookup = {'s': 1, 'm': 60, 'h': 3600}
         self.time_regex = r'^[0-9]+[smh]?$'
         self.emoji = '\N{PURPLE HEART}'
@@ -18,14 +18,14 @@ class Giveaway(commands.Cog):
 
     @tasks.loop(seconds=5)
     async def check_giveaways(self):
-        await self.client.wait_until_ready()
+        await self.bot.wait_until_ready()
         with open('config.json', 'r') as f:
             config = json.load(f)
         for guild_id, guild_data in config.items():
             if len(guild_data['giveaways']) > 0:
                 msg_id, msg_data = list(guild_data['giveaways'].items())[0]
                 if msg_data[0] < datetime.utcnow().timestamp():
-                    channel = self.client.get_channel(msg_data[1])
+                    channel = self.bot.get_channel(msg_data[1])
                     await self.remove_giveaway(channel, msg_id)
                     msg = await channel.fetch_message(msg_id)
                     embed = msg.embeds[0]
@@ -104,6 +104,6 @@ class Giveaway(commands.Cog):
         with open('config.json', 'w') as f:
             json.dump(config, f)
 
-def setup(client):
-    client.add_cog(Giveaway(client))
+def setup(bot):
+    bot.add_cog(Giveaway(bot))
     print('Loaded Giveaways')

@@ -7,8 +7,8 @@ import sys
 from prettytable import PrettyTable
 
 class Ranking(commands.Cog):
-    def __init__(self, client):
-        self.client = client
+    def __init__(self, bot):
+        self.bot = bot
         self.url = 'https://curseofaros.com'
         self.ranking_modes = {
             'xp': 'highscores',
@@ -189,6 +189,6 @@ class Ranking(commands.Cog):
         
         return info, color
 
-def setup(client):
-    client.add_cog(Ranking(client))
+def setup(bot):
+    bot.add_cog(Ranking(bot))
     print('Loaded Rankings')
