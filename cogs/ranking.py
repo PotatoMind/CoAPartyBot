@@ -60,6 +60,8 @@ class Ranking(commands.Cog):
                 description='\n'.join([f'#{20*(int(page)-1)+i+1}. {p["name"]} (LV. {self.get_level(p["xp"])}) {p["xp"]} XP' for i, p in enumerate(json_data)]),
                 color=discord.Color.green()
             )
+            # for i, p in enumerate(json_data):
+            #     embed.add_field(name=f'# {20*(int(page)-1)+i+1}. {p["name"]}', value=f'Level: {self.get_level(p["xp"])}, XP: {p["xp"]}', inline=False)
             embed.set_footer(text=f'Page {page}')
             await ctx.send(embed=embed)
     
