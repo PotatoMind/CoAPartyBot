@@ -73,34 +73,20 @@ class Ranking(commands.Cog):
             # await ctx.send(embed=embed)
     
     @commands.command(aliases=['rsearch', 'rs', 'rankingss'])
-    async def rankings_search(self, ctx, *, name):
+    async def rankings_search(self, ctx, *, name=None):
+        if not name:
+            name = await self.get_author_name(str(ctx.author.id))
+            if not name:
+                return await ctx.send('User not linked!')
+  
         if len(name) < 3 or len(name) > 14:
             return await ctx.send('Invalid name!')
+
         info = {mode: ('NA', 'NA') for mode in self.ranking_modes.keys()}
         color = None
-        for mode, resource in self.ranking_modes.items():
-            page = 0
-            i = 1
-            found = False
-            async with aiohttp.ClientSession() as cs:
-                async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
-                    req = await r.text()
-            while req and not found:
-                j = 0
-                json_data = json.loads(req)
-                while j < len(json_data) and not found:
-                    player = json_data[j]
-                    if player['name'] == name:
-                        found = True
-                        info[mode] = (i, player['xp'])
-                        color = player['name_color'] if player['name_color'] else '99aab5'
-                    else:
-                        j += 1
-                    i += 1
-                page += 1
-                async with aiohttp.ClientSession() as cs:
-                    async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
-                        req = await r.text()
+        for mode in self.ranking_modes.keys():
+            sub_info, color = await self.get_rank_info(mode, name)
+            info[mode] = sub_info
 
         embed = discord.Embed(
             title=f'Rank Info for {name}',
@@ -111,37 +97,17 @@ class Ranking(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(aliases=['rsm', 'rmode'])
-    async def rankings_search_mode(self, ctx, mode, *, name):
+    async def rankings_search_mode(self, ctx, mode, *, name=None):
+        if not name:
+            name = await self.get_author_name(str(ctx.author.id))
+            if not name:
+                return await ctx.send('User not linked!')
         if len(name) < 3 or len(name) > 14:
             return await ctx.send('Invalid name!')
         if not mode and mode not in self.ranking_modes:
             await ctx.send(f'Could not find mode.\nAcceptable Modes: {", ".join([m for m in self.ranking_modes.keys()])}')
         else:
-            info = None
-            color = None
-            resource = self.ranking_modes[mode]
-            page = 0
-            i = 1
-            found = False
-            async with aiohttp.ClientSession() as cs:
-                async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
-                    req = await r.text()
-            while req and not found:
-                j = 0
-                json_data = json.loads(req)
-                while j < len(json_data) and not found:
-                    player = json_data[j]
-                    if player['name'] == name:
-                        found = True
-                        info = (i, player['xp'])
-                        color = player['name_color'] if player['name_color'] else '99aab5'
-                    else:
-                        j += 1
-                    i += 1
-                page += 1
-                async with aiohttp.ClientSession() as cs:
-                    async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
-                        req = await r.text()
+            info, color = await self.get_rank_info(mode, name)
             
             if info:
                 embed = discord.Embed(
@@ -153,11 +119,75 @@ class Ranking(commands.Cog):
             else:
                 await ctx.send('Player rank info not found!')
     
+    @commands.command(aliases=['rl'])
+    async def rankings_link(self, ctx, *, name):
+        if len(name) < 3 or len(name) > 14:
+            return await ctx.send('Invalid name!')
+        
+        with open('rankings.json', 'r') as f:
+            config = json.load(f)
+        
+        config[str(ctx.author.id)] = name
+
+        with open('rankings.json', 'w') as f:
+            json.dump(config, f)
+
+        await ctx.send('Linked account!')
+    
+    @commands.command(aliases=['rul'])
+    async def rankings_unlink(self, ctx):
+        with open('rankings.json', 'r') as f:
+            config = json.load(f)
+        
+        found = config.pop(str(ctx.author.id), None)
+        if not found:
+            return await ctx.send('Account not found!')
+
+        with open('rankings.json', 'w') as f:
+            json.dump(config, f)
+        
+        await ctx.send('Unlinked account!')
+    
+    async def get_author_name(self, id):
+        with open('rankings.json', 'r') as f:
+            config = json.load(f)
+        
+        return config.get(id, None)
+
     def get_level(self, xp):
         level = 0
         while xp >= self.level_table[level]:
             level += 1
         return level
+    
+    async def get_rank_info(self, mode, name):
+        info = None
+        color = None
+        resource = self.ranking_modes[mode]
+        page = 0
+        i = 1
+        found = False
+        async with aiohttp.ClientSession() as cs:
+            async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
+                req = await r.text()
+        while req and not found:
+            j = 0
+            json_data = json.loads(req)
+            while j < len(json_data) and not found:
+                player = json_data[j]
+                if player['name'] == name:
+                    found = True
+                    info = (i, player['xp'])
+                    color = player['name_color'] if player['name_color'] else '99aab5'
+                else:
+                    j += 1
+                i += 1
+            page += 1
+            async with aiohttp.ClientSession() as cs:
+                async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
+                    req = await r.text()
+        
+        return info, color
 
 def setup(client):
     client.add_cog(Ranking(client))
