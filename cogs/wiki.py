@@ -5,8 +5,8 @@ import requests
 from urllib.parse import quote 
 
 class Wiki(commands.Cog):
-    def __init__(self, client):
-        self.client = client
+    def __init__(self, bot):
+        self.bot = bot
         
     @commands.command()
     async def wiki_search(self, ctx, *, search_term):
@@ -24,6 +24,6 @@ class Wiki(commands.Cog):
             )
             await ctx.send(embed=embed)
 
-def setup(client):
-    client.add_cog(Wiki(client))
+def setup(bot):
+    bot.add_cog(Wiki(bot))
     print('Loaded Wiki')
