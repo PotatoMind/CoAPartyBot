@@ -29,7 +29,7 @@ class Wiki(commands.Cog):
             )
             await ctx.send(embed=embed)
     
-    @commands.command()
+    @commands.command(aliases=['wsf'])
     async def wiki_search_fuzzy(self, ctx, *, search_term):
         prefix_page_ranks = await self.wiki_page_prefix_search(search_term)
         substring_page_ranks = await self.wiki_page_substring_search(search_term)
@@ -66,7 +66,9 @@ class Wiki(commands.Cog):
             async with cs.get(f'{self.url}/api.php?{url_options}') as r:
                 req = await r.json()
         for page in req['query']['allpages']:
-            page_ranks.append((page['title'], textdistance.damerau_levenshtein.normalized_similarity(page['title'].lower(), search_term.lower())))
+            levenstein_distance = textdistance.damerau_levenshtein.normalized_similarity(page['title'].lower(), search_term.lower())
+            substr_distance = textdistance.lcsstr.normalized_similarity(page['title'].lower().split(), search_term.lower().split())
+            page_ranks.append((page['title'], (levenstein_distance + substr_distance)/2))
         return page_ranks
     
     async def wiki_page_substring_search(self, search_term):
@@ -78,7 +80,9 @@ class Wiki(commands.Cog):
                 async with cs.get(f'{self.url}/api.php?{url_options}') as r:
                     req = await r.json()
             for page in req['query']['search']:
-                page_ranks.append((page['title'], textdistance.damerau_levenshtein.normalized_similarity(page['title'].lower(), search_term.lower())))
+                levenstein_distance = textdistance.damerau_levenshtein.normalized_similarity(page['title'].lower(), search_term.lower())
+                substr_distance = textdistance.lcsstr.normalized_similarity(page['title'].lower().split(), search_term.lower().split())
+                page_ranks.append((page['title'], (levenstein_distance + substr_distance)/2))
         return page_ranks
         
 def setup(bot):
