@@ -4,16 +4,17 @@ import json
 from urllib.parse import quote
 import aiohttp
 import sys
+from prettytable import PrettyTable
 
 class Ranking(commands.Cog):
     def __init__(self, client):
         self.client = client
         self.url = 'https://curseofaros.com'
         self.ranking_modes = {
-            'xp': 'highscores', 
-            'woodcutting': 'highscores-woodcutting',
+            'xp': 'highscores',
             'mining': 'highscores-mining',
             'smithing': 'highscores-smithing',
+            'woodcutting': 'highscores-woodcutting',
             'crafting': 'highscores-crafting'
         }
         self.level_table = [
@@ -55,18 +56,26 @@ class Ranking(commands.Cog):
             if not req:
                 return await ctx.send(f'Ran out of pages!')
             json_data = json.loads(req)
-            embed = discord.Embed(
-                title=f'Top ranks for {mode}',
-                description='\n'.join([f'#{20*(int(page)-1)+i+1}. {p["name"]} (LV. {self.get_level(p["xp"])}) {p["xp"]} XP' for i, p in enumerate(json_data)]),
-                color=discord.Color.green()
-            )
+
+            table = PrettyTable()
+            table.field_names = ['Rank', 'Name', 'Level', 'XP']
+            for i, p in enumerate(json_data):
+                table.add_row([20*(int(page)-1)+i+1, p['name'], self.get_level(p['xp']), f"{p['xp']:,}"])
+            await ctx.send(f'```diff\n{table}\n*** Page {page} ***\n```')
+            # embed = discord.Embed(
+            #     title=f'Top ranks for {mode}',
+            #     description='\n\n'.join([f'#{20*(int(page)-1)+i+1}. (LV. {self.get_level(p["xp"])}) {p["name"]} | {p["xp"]:,} XP' for i, p in enumerate(json_data)]),
+            #     color=discord.Color.green()
+            # )
             # for i, p in enumerate(json_data):
             #     embed.add_field(name=f'# {20*(int(page)-1)+i+1}. {p["name"]}', value=f'Level: {self.get_level(p["xp"])}, XP: {p["xp"]}', inline=False)
-            embed.set_footer(text=f'Page {page}')
-            await ctx.send(embed=embed)
+            # embed.set_footer(text=f'Page {page}')
+            # await ctx.send(embed=embed)
     
     @commands.command(aliases=['rsearch', 'rs', 'rankingss'])
     async def rankings_search(self, ctx, *, name):
+        if len(name) < 3 or len(name) > 14:
+            return await ctx.send('Invalid name!')
         info = {mode: ('NA', 'NA') for mode in self.ranking_modes.keys()}
         color = None
         for mode, resource in self.ranking_modes.items():
@@ -98,11 +107,13 @@ class Ranking(commands.Cog):
             color=discord.Color(int(f'0x{color}', 16))
         )
         for mode, data in info.items():
-            embed.add_field(name=mode, value=f'#{data[0]} (LV. {self.get_level(data[1])}) {data[1]} XP', inline=False)
+            embed.add_field(name=mode, value=f'#{data[0]} (LV. {self.get_level(data[1])}) {data[1]:,} XP', inline=False)
         await ctx.send(embed=embed)
 
     @commands.command(aliases=['rsm', 'rmode'])
     async def rankings_search_mode(self, ctx, mode, *, name):
+        if len(name) < 3 or len(name) > 14:
+            return await ctx.send('Invalid name!')
         if not mode and mode not in self.ranking_modes:
             await ctx.send(f'Could not find mode.\nAcceptable Modes: {", ".join([m for m in self.ranking_modes.keys()])}')
         else:
@@ -137,7 +148,7 @@ class Ranking(commands.Cog):
                     title=f'Rank Info for {name}',
                     color=discord.Color(int(f'0x{color}', 16))
                 )
-                embed.add_field(name=mode, value=f'#{info[0]} (LV. {self.get_level(info[1])}) {info[1]} XP', inline=False)
+                embed.add_field(name=mode, value=f'#{info[0]} (LV. {self.get_level(info[1])}) {info[1]:,} XP', inline=False)
                 await ctx.send(embed=embed)
             else:
                 await ctx.send('Player rank info not found!')
