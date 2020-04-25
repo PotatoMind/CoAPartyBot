@@ -5,6 +5,7 @@ from urllib.parse import quote
 import aiohttp
 import sys
 from prettytable import PrettyTable
+import asyncio
 
 class Ranking(commands.Cog):
     def __init__(self, bot):
@@ -84,16 +85,20 @@ class Ranking(commands.Cog):
 
         info = {mode: ('NA', 'NA') for mode in self.ranking_modes.keys()}
         color = None
-        for mode in self.ranking_modes.keys():
-            sub_info, color = await self.get_rank_info(mode, name)
-            info[mode] = sub_info
+
+        tasks = [self.get_rank_info(mode, name) for mode in self.ranking_modes.keys()]
+        results = await asyncio.gather(*tasks)
+        for player_ranks in results:
+            sub_info, color = player_ranks[1]
+            info[player_ranks[0]] = sub_info
 
         embed = discord.Embed(
             title=f'Rank Info for {name}',
             color=discord.Color(int(f'0x{color}', 16))
         )
         for mode, data in info.items():
-            embed.add_field(name=mode, value=f'#{data[0]} (LV. {self.get_level(data[1])}) {data[1]:,} XP', inline=False)
+            if data:
+                embed.add_field(name=mode, value=f'#{data[0]} (LV. {self.get_level(data[1])}) {data[1]:,} XP', inline=False)
         await ctx.send(embed=embed)
 
     @commands.command(aliases=['rsm', 'rmode'])
@@ -107,7 +112,8 @@ class Ranking(commands.Cog):
         if not mode and mode not in self.ranking_modes:
             await ctx.send(f'Could not find mode.\nAcceptable Modes: {", ".join([m for m in self.ranking_modes.keys()])}')
         else:
-            info, color = await self.get_rank_info(mode, name)
+            player_rank = await self.get_rank_info(mode, name)
+            info, color = player_rank[1]
             
             if info:
                 embed = discord.Embed(
@@ -187,7 +193,7 @@ class Ranking(commands.Cog):
                 async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
                     req = await r.text()
         
-        return info, color
+        return (mode, (info, color))
 
 def setup(bot):
     bot.add_cog(Ranking(bot))
