@@ -102,16 +102,16 @@ class Ranking(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(aliases=['rsm', 'rmode'])
-    async def rankings_search_mode(self, ctx, mode, *, name=None):
-        if not name:
-            name = await self.get_author_name(str(ctx.author.id))
-            if not name:
-                return await ctx.send('User not linked!')
-        if len(name) < 3 or len(name) > 14:
-            return await ctx.send('Invalid name!')
-        if not mode and mode not in self.ranking_modes:
+    async def rankings_search_mode(self, ctx, mode=None, *, name=None):
+        if not mode or mode not in self.ranking_modes:
             await ctx.send(f'Could not find mode.\nAcceptable Modes: {", ".join([m for m in self.ranking_modes.keys()])}')
         else:
+            if not name:
+                name = await self.get_author_name(str(ctx.author.id))
+                if not name:
+                    return await ctx.send('User not linked!')
+            if len(name) < 3 or len(name) > 14:
+                return await ctx.send('Invalid name!')
             player_rank = await self.get_rank_info(mode, name)
             info, color = player_rank[1]
             
