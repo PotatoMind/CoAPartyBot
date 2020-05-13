@@ -6,6 +6,8 @@ import aiohttp
 import sys
 from prettytable import PrettyTable
 import asyncio
+import time
+import math
 
 class Ranking(commands.Cog):
     def __init__(self, bot):
@@ -44,7 +46,51 @@ class Ranking(commands.Cog):
             1302667765, 1496372370, 1718880532, 1974475291, 2268076571,
             sys.maxsize
         ]
+        self.page_bins = 4
+        self.check_pages.start()
+
+    @tasks.loop(minutes=30)
+    async def check_pages(self):
+        await self.bot.wait_until_ready()
+        page_numbers = {mode: 0 for mode in self.ranking_modes.keys()}
+
+        for mode, resource in self.ranking_modes.items():
+            page_numbers[mode] = await self.get_max_page(resource)
+            print(resource, page_numbers[mode])
         
+        with open('rankings.json', 'r') as f:
+            config = json.load(f)
+        config['max_pages'] = page_numbers
+        with open('rankings.json', 'w') as f:
+            json.dump(config, f)
+
+    async def get_max_page(self, resource):
+        index_1 = 1
+        index_2 = 1
+        async with aiohttp.ClientSession() as cs:
+            async with cs.get(f'{self.url}/{resource}.json?p={index_1}') as r:
+                req = await r.text()
+
+        while req and len(json.loads(req)) != 0:
+            index_2 = index_1
+            index_1 = index_1 * 2
+            async with aiohttp.ClientSession() as cs:
+                async with cs.get(f'{self.url}/{resource}.json?p={index_1}') as r:
+                    req = await r.text()
+
+        mid = 0
+        while index_1 != index_2:
+            mid = index_1 + (index_2 - index_1) // 2
+            async with aiohttp.ClientSession() as cs:
+                async with cs.get(f'{self.url}/{resource}.json?p={mid}') as r:
+                    req = await r.text()
+            if req and len(json.loads(req)) != 0:
+                index_2 = mid + 1
+            else:
+                index_1 = mid - 1
+
+        return index_1
+
     @commands.command()
     async def rankings(self, ctx, mode='xp', page='1'):
         if mode not in self.ranking_modes:
@@ -63,15 +109,6 @@ class Ranking(commands.Cog):
             for i, p in enumerate(json_data):
                 table.add_row([20*(int(page)-1)+i+1, p['name'], self.get_level(p['xp']), f"{p['xp']:,}"])
             await ctx.send(f'```diff\n{table}\n*** Page {page} ***\n```')
-            # embed = discord.Embed(
-            #     title=f'Top ranks for {mode}',
-            #     description='\n\n'.join([f'#{20*(int(page)-1)+i+1}. (LV. {self.get_level(p["xp"])}) {p["name"]} | {p["xp"]:,} XP' for i, p in enumerate(json_data)]),
-            #     color=discord.Color.green()
-            # )
-            # for i, p in enumerate(json_data):
-            #     embed.add_field(name=f'# {20*(int(page)-1)+i+1}. {p["name"]}', value=f'Level: {self.get_level(p["xp"])}, XP: {p["xp"]}', inline=False)
-            # embed.set_footer(text=f'Page {page}')
-            # await ctx.send(embed=embed)
     
     @commands.command(aliases=['rsearch', 'rs', 'rankingss'])
     async def rankings_search(self, ctx, *, name=None):
@@ -86,9 +123,21 @@ class Ranking(commands.Cog):
         info = {mode: ('NA', 'NA') for mode in self.ranking_modes.keys()}
         color = None
 
-        tasks = [self.get_rank_info(mode, name) for mode in self.ranking_modes.keys()]
-        results = await asyncio.gather(*tasks)
-        for player_ranks in results:
+        # start_time = time.time()
+        # tasks = [self.get_rank_info(mode, name) for mode in self.ranking_modes.keys()]
+        # results = await asyncio.gather(*tasks)
+        # end_time = time.time() - start_time
+        # await ctx.send(f'Took {end_time}s')
+        # for player_ranks in results:
+        #     sub_info, color = player_ranks[1]
+        #     info[player_ranks[0]] = sub_info
+        
+        start_time = time.time()
+        futures = [self.set_rank_tasks(mode, name) for mode in self.ranking_modes.keys()]
+        done, pending = await asyncio.wait(futures)
+        end_time = time.time() - start_time
+        for task in done:
+            player_ranks = task.result()
             sub_info, color = player_ranks[1]
             info[player_ranks[0]] = sub_info
 
@@ -96,6 +145,7 @@ class Ranking(commands.Cog):
             title=f'Rank Info for {name}',
             color=discord.Color(int(f'0x{color}', 16))
         )
+        embed.set_footer(text=f'{end_time:.2f}s')
         for mode, data in info.items():
             if data:
                 embed.add_field(name=mode, value=f'#{data[0]} (LV. {self.get_level(data[1])}) {data[1]:,} XP', inline=False)
@@ -112,7 +162,9 @@ class Ranking(commands.Cog):
                     return await ctx.send('User not linked!')
             if len(name) < 3 or len(name) > 14:
                 return await ctx.send('Invalid name!')
-            player_rank = await self.get_rank_info(mode, name)
+            start_time = time.time()
+            player_rank = await self.set_rank_tasks(mode, name)
+            end_time = time.time() - start_time
             info, color = player_rank[1]
             
             if info:
@@ -121,6 +173,7 @@ class Ranking(commands.Cog):
                     color=discord.Color(int(f'0x{color}', 16))
                 )
                 embed.add_field(name=mode, value=f'#{info[0]} (LV. {self.get_level(info[1])}) {info[1]:,} XP', inline=False)
+                embed.set_footer(text=f'{end_time:.2f}s')
                 await ctx.send(embed=embed)
             else:
                 await ctx.send('Player rank info not found!')
@@ -159,24 +212,32 @@ class Ranking(commands.Cog):
             config = json.load(f)
         
         return config.get(id, None)
-
-    def get_level(self, xp):
-        level = 0
-        while xp >= self.level_table[level]:
-            level += 1
-        return level
     
-    async def get_rank_info(self, mode, name):
+    async def set_rank_tasks(self, mode, name):
+        resource = self.ranking_modes[mode]
+        max_page = await self.get_max_page(resource)
+        split = math.ceil(max_page / self.page_bins)
+        tasks = []
+        i = 0
+        while i < max_page:
+            temp = i + split
+            tasks.append(self.get_rank_info(mode, name, i, max_page if temp > max_page else temp))
+            i = temp
+        done, pending = await asyncio.wait(tasks, timeout=600, return_when=asyncio.FIRST_COMPLETED)
+        [p.cancel() for p in pending]
+        return done.pop().result()
+
+    async def get_rank_info(self, mode, name, start_page=0, end_page=sys.maxsize):
         info = None
         color = None
         resource = self.ranking_modes[mode]
-        page = 0
         i = 1
         found = False
         async with aiohttp.ClientSession() as cs:
-            async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
+            async with cs.get(f'{self.url}/{resource}.json?p={start_page}') as r:
                 req = await r.text()
-        while req and not found:
+        page = start_page
+        while req and not found and page < end_page:
             j = 0
             json_data = json.loads(req)
             while j < len(json_data) and not found:
@@ -194,6 +255,12 @@ class Ranking(commands.Cog):
                     req = await r.text()
         
         return (mode, (info, color))
+
+    def get_level(self, xp):
+        level = 0
+        while xp >= self.level_table[level]:
+            level += 1
+        return level
 
 def setup(bot):
     bot.add_cog(Ranking(bot))
