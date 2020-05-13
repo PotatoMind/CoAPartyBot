@@ -186,7 +186,7 @@ class Ranking(commands.Cog):
         with open('rankings.json', 'r') as f:
             config = json.load(f)
         
-        config[str(ctx.author.id)] = name
+        config['users'][str(ctx.author.id)] = name
 
         with open('rankings.json', 'w') as f:
             json.dump(config, f)
@@ -198,7 +198,7 @@ class Ranking(commands.Cog):
         with open('rankings.json', 'r') as f:
             config = json.load(f)
         
-        found = config.pop(str(ctx.author.id), None)
+        found = config['users'].pop(str(ctx.author.id), None)
         if not found:
             return await ctx.send('Account not found!')
 
@@ -211,7 +211,7 @@ class Ranking(commands.Cog):
         with open('rankings.json', 'r') as f:
             config = json.load(f)
         
-        return config.get(id, None)
+        return config['users'].get(id, None)
     
     async def set_rank_tasks(self, mode, name):
         resource = self.ranking_modes[mode]
