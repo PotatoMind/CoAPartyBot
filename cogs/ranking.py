@@ -108,7 +108,11 @@ class Ranking(commands.Cog):
             table.field_names = ['Rank', 'Name', 'Level', 'XP']
             for i, p in enumerate(json_data):
                 table.add_row([20*(int(page)-1)+i+1, p['name'], self.get_level(p['xp']), f"{p['xp']:,}"])
-            await ctx.send(f'```diff\n{table}\n*** Page {page} ***\n```')
+            
+            with open('rankings.json', 'r') as f:
+                config = json.load(f)
+            max_page = config['max_pages'].get(mode, 'NA')
+            await ctx.send(f'```diff\n{table}\n*** Page {page} / {max_page}***\n```')
     
     @commands.command(aliases=['rsearch', 'rs', 'rankingss'])
     async def rankings_search(self, ctx, *, name=None):
