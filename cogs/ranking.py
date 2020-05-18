@@ -112,7 +112,7 @@ class Ranking(commands.Cog):
             with open('rankings.json', 'r') as f:
                 config = json.load(f)
             max_page = config['max_pages'].get(mode, 'NA')
-            await ctx.send(f'```diff\n{table}\n*** Page {page} / {max_page}***\n```')
+            await ctx.send(f'```diff\n{table}\n*** Page {page} / {max_page} ***\n```')
     
     @commands.command(aliases=['rsearch', 'rs', 'rankingss'])
     async def rankings_search(self, ctx, *, name=None):
