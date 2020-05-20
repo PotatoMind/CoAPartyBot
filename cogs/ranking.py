@@ -126,15 +126,6 @@ class Ranking(commands.Cog):
 
         info = {mode: ('NA', 'NA') for mode in self.ranking_modes.keys()}
         color = None
-
-        # start_time = time.time()
-        # tasks = [self.get_rank_info(mode, name) for mode in self.ranking_modes.keys()]
-        # results = await asyncio.gather(*tasks)
-        # end_time = time.time() - start_time
-        # await ctx.send(f'Took {end_time}s')
-        # for player_ranks in results:
-        #     sub_info, color = player_ranks[1]
-        #     info[player_ranks[0]] = sub_info
         
         start_time = time.time()
         futures = [self.set_rank_tasks(mode, name) for mode in self.ranking_modes.keys()]
@@ -225,7 +216,10 @@ class Ranking(commands.Cog):
         i = 0
         while i < max_page:
             temp = i + split
-            tasks.append(self.get_rank_info(mode, name, i, max_page if temp > max_page else temp))
+            mid = (temp + i) // 2
+            # print(i, mid, -temp, -mid)
+            tasks.append(self.get_rank_info(mode, name, i, max_page if temp > max_page else mid))
+            tasks.append(self.get_rank_info(mode, name, -max_page if temp > max_page else -temp, -mid))
             i = temp
         done, pending = await asyncio.wait(tasks, timeout=600, return_when=asyncio.FIRST_COMPLETED)
         [p.cancel() for p in pending]
@@ -238,7 +232,7 @@ class Ranking(commands.Cog):
         i = 1
         found = False
         async with aiohttp.ClientSession() as cs:
-            async with cs.get(f'{self.url}/{resource}.json?p={start_page}') as r:
+            async with cs.get(f'{self.url}/{resource}.json?p={abs(start_page)}') as r:
                 req = await r.text()
         page = start_page
         while req and not found and page < end_page:
@@ -255,9 +249,11 @@ class Ranking(commands.Cog):
                 i += 1
             page += 1
             async with aiohttp.ClientSession() as cs:
-                async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
+                async with cs.get(f'{self.url}/{resource}.json?p={abs(page)}') as r:
                     req = await r.text()
         
+        if not found:
+            await asyncio.sleep(300)
         return (mode, (info, color))
 
     def get_level(self, xp):
