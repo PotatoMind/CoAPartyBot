@@ -123,6 +123,8 @@ class Ranking(commands.Cog):
   
         if len(name) < 3 or len(name) > 14:
             return await ctx.send('Invalid name!')
+        
+        name = name.lower()
 
         info = {mode: ('NA', 'NA') for mode in self.ranking_modes.keys()}
         color = None
@@ -135,9 +137,9 @@ class Ranking(commands.Cog):
             player_ranks = task.result()
             sub_info, color = player_ranks[1]
             info[player_ranks[0]] = sub_info
-
+        
         embed = discord.Embed(
-            title=f'Rank Info for {name}',
+            title=f'Rank Info for {info[list(self.ranking_modes.keys())[0]][2]}',
             color=discord.Color(int(f'0x{color}', 16))
         )
         embed.set_footer(text=f'{end_time:.2f}s')
@@ -157,6 +159,7 @@ class Ranking(commands.Cog):
                     return await ctx.send('User not linked!')
             if len(name) < 3 or len(name) > 14:
                 return await ctx.send('Invalid name!')
+            name = name.lower()
             start_time = time.time()
             player_rank = await self.set_rank_tasks(mode, name)
             end_time = time.time() - start_time
@@ -164,7 +167,7 @@ class Ranking(commands.Cog):
             
             if info:
                 embed = discord.Embed(
-                    title=f'Rank Info for {name}',
+                    title=f'Rank Info for {info[2]}',
                     color=discord.Color(int(f'0x{color}', 16))
                 )
                 embed.add_field(name=mode, value=f'#{info[0]} (LV. {self.get_level(info[1])}) {info[1]:,} XP', inline=False)
@@ -240,9 +243,9 @@ class Ranking(commands.Cog):
             json_data = json.loads(req)
             while j < len(json_data) and not found:
                 player = json_data[j]
-                if player['name'] == name:
+                if player['name'].lower() == name:
                     found = True
-                    info = (i, player['xp'])
+                    info = (i, player['xp'], player['name'])
                     color = player['name_color'] if player['name_color'] else '99aab5'
                 else:
                     j += 1
