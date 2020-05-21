@@ -142,15 +142,19 @@ class Ranking(commands.Cog):
                 found_name = sub_info[2]
             info[player_ranks[0]] = sub_info
 
-        embed = discord.Embed(
-            title=f'Rank Info for {found_name}',
-            color=discord.Color(int(f'0x{color}', 16))
-        )
-        embed.set_footer(text=f'{end_time:.2f}s')
-        for mode, data in info.items():
-            if data:
-                embed.add_field(name=mode, value=f'#{data[0]} (LV. {self.get_level(data[1])}) {data[1]:,} XP', inline=False)
-        await ctx.send(embed=embed)
+        if found_name:
+            embed = discord.Embed(
+                title=f'Rank Info for {found_name}',
+                color=discord.Color(int(f'0x{color}', 16))
+            )
+            embed.set_footer(text=f'{end_time:.2f}s')
+            for mode, data in info.items():
+                if data:
+                    embed.add_field(name=mode, value=f'#{data[0]} (LV. {self.get_level(data[1])}) {data[1]:,} XP', inline=False)
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send('Player rank info not found!')
+
 
     @commands.command(aliases=['rsm', 'rmode'])
     async def rankings_search_mode(self, ctx, mode=None, *, name=None):
