@@ -231,7 +231,10 @@ class Ranking(commands.Cog):
             i = temp
         done, pending = await asyncio.wait(tasks, timeout=600, return_when=asyncio.FIRST_COMPLETED)
         [p.cancel() for p in pending]
-        return done.pop().result()
+        if done:
+            return done.pop().result()
+        else:
+            return None
 
     async def get_rank_info(self, mode, name, start_page=0, end_page=sys.maxsize):
         info = None
