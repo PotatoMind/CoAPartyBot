@@ -233,7 +233,7 @@ class Ranking(commands.Cog):
         if done:
             return done.pop().result()
         else:
-            return (mode, None)
+            return (mode, (None, None))
 
     async def get_rank_info(self, mode, name, start_page=0, end_page=sys.maxsize):
         info = None
