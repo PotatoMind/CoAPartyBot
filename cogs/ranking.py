@@ -128,6 +128,7 @@ class Ranking(commands.Cog):
 
         info = {mode: ('NA', 'NA') for mode in self.ranking_modes.keys()}
         color = None
+        found_name = None
         
         start_time = time.time()
         futures = [self.set_rank_tasks(mode, name) for mode in self.ranking_modes.keys()]
@@ -135,11 +136,15 @@ class Ranking(commands.Cog):
         end_time = time.time() - start_time
         for task in done:
             player_ranks = task.result()
-            sub_info, color = player_ranks[1]
+            sub_info, temp_color = player_ranks[1]
+            if not color and temp_color:
+                color = temp_color
+            if not found_name and sub_info:
+                found_name = sub_info[2]
             info[player_ranks[0]] = sub_info
         
         embed = discord.Embed(
-            title=f'Rank Info for {info[list(self.ranking_modes.keys())[0]][2]}',
+            title=f'Rank Info for {found_name}',
             color=discord.Color(int(f'0x{color}', 16))
         )
         embed.set_footer(text=f'{end_time:.2f}s')
