@@ -28,21 +28,21 @@ class Ranking(commands.Cog):
             4651, 5389, 6237, 7212, 8332, 
             9618, 11095, 12792, 14742, 16982, 
             19555, 22510, 25905, 29805, 34285, 
-            39431, 45342, 52132, 59932, 68892, 
-            79184, 91006, 104586, 120186, 138106, 
-            158690, 182335, 209496, 240696, 276536, 
-            317705, 364996, 419319, 481720, 553400, 
-            635738, 730320, 838966, 963768, 1107128, 
-            1271805, 1460969, 1678262, 1927866, 2214586, 
-            2543940, 2922269, 3356855, 3856063, 4429503, 
-            5088212, 5844870, 6714042, 7712459, 8859339, 
-            10176758, 11690075, 13428420, 15425254, 17719014, 
-            20353852, 23380486, 26857176, 30850844, 35438364, 
-            40708040, 46761308, 53714688, 61702024, 70877064, 
-            81416417, 93522954, 107429714, 123404386, 141754466, 
-            162833172, 187046247, 214859767, 246809111, 283509271, 
-            325666684, 374092835, 429719875, 493618564, 567018884, 
-            651333710, 748186012, 859440093, 987237472, 1134038112, 
+            39431, 45342, 52132, 59932, 68892,
+            79184, 91006, 104586, 120186, 138106,
+            158690, 182335, 209496, 240696, 276536,
+            317705, 364996, 419319, 481720, 553400,
+            635738, 730320, 838966, 963768, 1107128,
+            1271805, 1460969, 1678262, 1927866, 2214586,
+            2543940, 2922269, 3356855, 3856063, 4429503,
+            5088212, 5844870, 6714042, 7712459, 8859339,
+            10176758, 11690075, 13428420, 15425254, 17719014,
+            20353852, 23380486, 26857176, 30850844, 35438364,
+            40708040, 46761308, 53714688, 61702024, 70877064,
+            81416417, 93522954, 107429714, 123404386, 141754466,
+            162833172, 187046247, 214859767, 246809111, 283509271,
+            325666684, 374092835, 429719875, 493618564, 567018884,
+            651333710, 748186012, 859440093, 987237472, 1134038112,
             1302667765, 1496372370, 1718880532, 1974475291, 2268076571,
             sys.maxsize
         ]
@@ -57,7 +57,7 @@ class Ranking(commands.Cog):
         for mode, resource in self.ranking_modes.items():
             page_numbers[mode] = await self.get_max_page(resource)
             print(resource, page_numbers[mode])
-        
+
         with open('rankings.json', 'r') as f:
             config = json.load(f)
         config['max_pages'] = page_numbers
@@ -108,28 +108,27 @@ class Ranking(commands.Cog):
             table.field_names = ['Rank', 'Name', 'Level', 'XP']
             for i, p in enumerate(json_data):
                 table.add_row([20*(int(page)-1)+i+1, p['name'], self.get_level(p['xp']), f"{p['xp']:,}"])
-            
+
             with open('rankings.json', 'r') as f:
                 config = json.load(f)
             max_page = config['max_pages'].get(mode, 'NA')
             await ctx.send(f'```diff\n{table}\n*** Page {page} / {max_page} ***\n```')
-    
+
     @commands.command(aliases=['rsearch', 'rs', 'rankingss'])
     async def rankings_search(self, ctx, *, name=None):
         if not name:
             name = await self.get_author_name(str(ctx.author.id))
             if not name:
                 return await ctx.send('User not linked!')
-  
+
         if len(name) < 3 or len(name) > 14:
             return await ctx.send('Invalid name!')
-        
+
         name = name.lower()
 
         info = {mode: ('NA', 'NA') for mode in self.ranking_modes.keys()}
         color = None
         found_name = None
-        
         start_time = time.time()
         futures = [self.set_rank_tasks(mode, name) for mode in self.ranking_modes.keys()]
         done, pending = await asyncio.wait(futures)
@@ -142,7 +141,7 @@ class Ranking(commands.Cog):
             if not found_name and sub_info:
                 found_name = sub_info[2]
             info[player_ranks[0]] = sub_info
-        
+
         embed = discord.Embed(
             title=f'Rank Info for {found_name}',
             color=discord.Color(int(f'0x{color}', 16))
@@ -169,7 +168,7 @@ class Ranking(commands.Cog):
             player_rank = await self.set_rank_tasks(mode, name)
             end_time = time.time() - start_time
             info, color = player_rank[1]
-            
+
             if info:
                 embed = discord.Embed(
                     title=f'Rank Info for {info[2]}',
@@ -180,42 +179,42 @@ class Ranking(commands.Cog):
                 await ctx.send(embed=embed)
             else:
                 await ctx.send('Player rank info not found!')
-    
+
     @commands.command(aliases=['rl'])
     async def rankings_link(self, ctx, *, name):
         if len(name) < 3 or len(name) > 14:
             return await ctx.send('Invalid name!')
-        
+
         with open('rankings.json', 'r') as f:
             config = json.load(f)
-        
+
         config['users'][str(ctx.author.id)] = name
 
         with open('rankings.json', 'w') as f:
             json.dump(config, f)
 
         await ctx.send('Linked account!')
-    
+
     @commands.command(aliases=['rul'])
     async def rankings_unlink(self, ctx):
         with open('rankings.json', 'r') as f:
             config = json.load(f)
-        
+
         found = config['users'].pop(str(ctx.author.id), None)
         if not found:
             return await ctx.send('Account not found!')
 
         with open('rankings.json', 'w') as f:
             json.dump(config, f)
-        
+
         await ctx.send('Unlinked account!')
-    
+
     async def get_author_name(self, id):
         with open('rankings.json', 'r') as f:
             config = json.load(f)
-        
+
         return config['users'].get(id, None)
-    
+
     async def set_rank_tasks(self, mode, name):
         resource = self.ranking_modes[mode]
         max_page = await self.get_max_page(resource)
@@ -259,9 +258,10 @@ class Ranking(commands.Cog):
             async with aiohttp.ClientSession() as cs:
                 async with cs.get(f'{self.url}/{resource}.json?p={abs(page)}') as r:
                     req = await r.text()
-        
+
         if not found:
-            await asyncio.sleep(300)
+            print(mode, name, start_page, end_page)
+            await asyncio.sleep(600)
         return (mode, (info, color))
 
     def get_level(self, xp):
