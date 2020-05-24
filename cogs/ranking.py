@@ -8,6 +8,7 @@ from prettytable import PrettyTable
 import asyncio
 import time
 import math
+import datetime
 
 class Ranking(commands.Cog):
     def __init__(self, bot):
@@ -48,6 +49,7 @@ class Ranking(commands.Cog):
         ]
         self.page_bins = 4
         self.check_pages.start()
+        self.update_cached_rankings.start()
 
     @tasks.loop(minutes=30)
     async def check_pages(self):
@@ -90,6 +92,41 @@ class Ranking(commands.Cog):
                 index_1 = mid - 1
 
         return index_1
+
+    @tasks.loop(minutes=30)
+    async def update_cached_rankings(self):
+        await self.bot.wait_until_ready()
+        with open('rankings.json', 'r') as f:
+            config = json.load(f)
+        
+        futures = [self.update_cached_rankings_helper(name) for name in config['cache'].keys()]
+        await asyncio.wait(futures)
+
+    async def update_cached_rankings_helper(self, name):
+        info = {}
+        futures = [self.set_rank_tasks(mode, name) for mode in self.ranking_modes.keys()]
+        done, pending = await asyncio.wait(futures)
+        for task in done:
+            player_ranks = task.result()
+            sub_info, temp_color = player_ranks[1]
+            if sub_info:
+                info[player_ranks[0]] = sub_info
+
+        if len(info) > 0:
+            print(f'Saving {name} to cache')
+            await self.save_to_cache(name, info)
+
+    @commands.command()
+    async def rankings_track(self, ctx, *, name):
+        with open('rankings.json', 'r') as f:
+            config = json.load(f)
+        if config['cache'].get(name.lower(), None):
+            await ctx.send(f'{name} is already being tracked!')
+        else:
+            config['cache'][name.lower()] = []
+            with open('rankings.json', 'w') as f:
+                json.dump(config, f)
+            await ctx.send(f'Tracking started for {name}.')
 
     @commands.command()
     async def rankings(self, ctx, mode='xp', page='1'):
@@ -136,7 +173,7 @@ class Ranking(commands.Cog):
 
         name = name.lower()
         rank_mode_sub = [mode for mode in self.ranking_modes.keys() if mode in modes]
-        info = {mode: ('NA', 'NA') for mode in rank_mode_sub}
+        info = {}
         color = None
         found_name = None
         futures = [self.set_rank_tasks(mode, name) for mode in rank_mode_sub]
@@ -152,6 +189,7 @@ class Ranking(commands.Cog):
                 found_name = sub_info[2]
             info[player_ranks[0]] = sub_info
         if found_name:
+            await self.save_to_cache(name, info)
             embed = discord.Embed(
                 title=f'Rank Info for {found_name}',
                 color=discord.Color(int(f'0x{color}', 16))
@@ -257,6 +295,27 @@ class Ranking(commands.Cog):
         while xp >= self.level_table[level]:
             level += 1
         return level
+    
+    async def save_to_cache(self, name, info):
+        with open('rankings.json', 'r') as f:
+            config = json.load(f)
+
+        cached_info = config['cache'].get(name, None)
+        if not cached_info:
+            cached_info = []
+
+        cached_info.append((info, datetime.datetime.now().isoformat()))
+
+        config['cache'][name] = cached_info
+
+        with open('rankings.json', 'w') as f:
+            json.dump(config, f)
+
+    async def get_from_cache(self, name):
+        with open('rankings.json', 'r') as f:
+            config = json.load(f)
+
+        return config['cache'].get(name, None)
 
 def setup(bot):
     bot.add_cog(Ranking(bot))
