@@ -21,13 +21,13 @@ class Ranking(commands.Cog):
             'crafting': 'highscores-crafting'
         }
         self.level_table = [
-            0, 46, 99, 159, 229, 
+            0, 46, 99, 159, 229,
             309, 401, 507, 628, 768, 
-            928, 1112, 1324, 1567, 1847, 
-            2168, 2537, 2961, 3448, 4008, 
-            4651, 5389, 6237, 7212, 8332, 
-            9618, 11095, 12792, 14742, 16982, 
-            19555, 22510, 25905, 29805, 34285, 
+            928, 1112, 1324, 1567, 1847,
+            2168, 2537, 2961, 3448, 4008,
+            4651, 5389, 6237, 7212, 8332,
+            9618, 11095, 12792, 14742, 16982,
+            19555, 22510, 25905, 29805, 34285,
             39431, 45342, 52132, 59932, 68892,
             79184, 91006, 104586, 120186, 138106,
             158690, 182335, 209496, 240696, 276536,
@@ -116,6 +116,16 @@ class Ranking(commands.Cog):
 
     @commands.command(aliases=['rsearch', 'rs', 'rankingss'])
     async def rankings_search(self, ctx, *, name=None):
+        return await self.rank_search_helper(ctx, [mode for mode in self.ranking_modes.keys()], name)
+
+    @commands.command(aliases=['rsm', 'rmode'])
+    async def rankings_search_mode(self, ctx, mode=None, *, name=None):
+        if not mode or mode not in self.ranking_modes:
+            await ctx.send(f'Could not find mode.\nAcceptable Modes: {", ".join([m for m in self.ranking_modes.keys()])}')
+        else:
+            return await self.rank_search_helper(ctx, [mode], name)
+    
+    async def rank_search_helper(self, ctx, modes, name):
         if not name:
             name = await self.get_author_name(str(ctx.author.id))
             if not name:
@@ -125,12 +135,12 @@ class Ranking(commands.Cog):
             return await ctx.send('Invalid name!')
 
         name = name.lower()
-
-        info = {mode: ('NA', 'NA') for mode in self.ranking_modes.keys()}
+        rank_mode_sub = [mode for mode in self.ranking_modes.keys() if mode in modes]
+        info = {mode: ('NA', 'NA') for mode in rank_mode_sub}
         color = None
         found_name = None
+        futures = [self.set_rank_tasks(mode, name) for mode in rank_mode_sub]
         start_time = time.time()
-        futures = [self.set_rank_tasks(mode, name) for mode in self.ranking_modes.keys()]
         done, pending = await asyncio.wait(futures)
         end_time = time.time() - start_time
         for task in done:
@@ -141,7 +151,6 @@ class Ranking(commands.Cog):
             if not found_name and sub_info:
                 found_name = sub_info[2]
             info[player_ranks[0]] = sub_info
-
         if found_name:
             embed = discord.Embed(
                 title=f'Rank Info for {found_name}',
@@ -155,34 +164,6 @@ class Ranking(commands.Cog):
         else:
             await ctx.send('Player rank info not found!')
 
-
-    @commands.command(aliases=['rsm', 'rmode'])
-    async def rankings_search_mode(self, ctx, mode=None, *, name=None):
-        if not mode or mode not in self.ranking_modes:
-            await ctx.send(f'Could not find mode.\nAcceptable Modes: {", ".join([m for m in self.ranking_modes.keys()])}')
-        else:
-            if not name:
-                name = await self.get_author_name(str(ctx.author.id))
-                if not name:
-                    return await ctx.send('User not linked!')
-            if len(name) < 3 or len(name) > 14:
-                return await ctx.send('Invalid name!')
-            name = name.lower()
-            start_time = time.time()
-            player_rank = await self.set_rank_tasks(mode, name)
-            end_time = time.time() - start_time
-            info, color = player_rank[1]
-
-            if info:
-                embed = discord.Embed(
-                    title=f'Rank Info for {info[2]}',
-                    color=discord.Color(int(f'0x{color}', 16))
-                )
-                embed.add_field(name=mode, value=f'#{info[0]} (LV. {self.get_level(info[1])}) {info[1]:,} XP', inline=False)
-                embed.set_footer(text=f'{end_time:.2f}s')
-                await ctx.send(embed=embed)
-            else:
-                await ctx.send('Player rank info not found!')
 
     @commands.command(aliases=['rl'])
     async def rankings_link(self, ctx, *, name):
