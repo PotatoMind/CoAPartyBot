@@ -23,7 +23,7 @@ class Ranking(commands.Cog):
         }
         self.level_table = [
             0, 46, 99, 159, 229,
-            309, 401, 507, 628, 768, 
+            309, 401, 507, 628, 768,
             928, 1112, 1324, 1567, 1847,
             2168, 2537, 2961, 3448, 4008,
             4651, 5389, 6237, 7212, 8332,
@@ -98,7 +98,6 @@ class Ranking(commands.Cog):
         await self.bot.wait_until_ready()
         with open('rankings.json', 'r') as f:
             config = json.load(f)
-        
         futures = [self.update_cached_rankings_helper(name) for name in config['cache'].keys()]
         await asyncio.wait(futures)
 
@@ -111,7 +110,6 @@ class Ranking(commands.Cog):
             sub_info, temp_color = player_ranks[1]
             if sub_info:
                 info[player_ranks[0]] = sub_info
-
         if len(info) > 0:
             print(f'Saving {name} to cache')
             await self.save_to_cache(name, info)
@@ -161,7 +159,7 @@ class Ranking(commands.Cog):
             await ctx.send(f'Could not find mode.\nAcceptable Modes: {", ".join([m for m in self.ranking_modes.keys()])}')
         else:
             return await self.rank_search_helper(ctx, [mode], name)
-    
+
     async def rank_search_helper(self, ctx, modes, name):
         if not name:
             name = await self.get_author_name(str(ctx.author.id))
@@ -295,26 +293,21 @@ class Ranking(commands.Cog):
         while xp >= self.level_table[level]:
             level += 1
         return level
-    
+
     async def save_to_cache(self, name, info):
         with open('rankings.json', 'r') as f:
             config = json.load(f)
-
         cached_info = config['cache'].get(name, None)
         if not cached_info:
             cached_info = []
-
         cached_info.append((info, datetime.datetime.now().isoformat()))
-
         config['cache'][name] = cached_info
-
         with open('rankings.json', 'w') as f:
             json.dump(config, f)
 
     async def get_from_cache(self, name):
         with open('rankings.json', 'r') as f:
             config = json.load(f)
-
         return config['cache'].get(name, None)
 
 def setup(bot):
