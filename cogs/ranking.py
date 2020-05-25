@@ -91,7 +91,7 @@ class Ranking(commands.Cog):
             else:
                 index_1 = mid - 1
 
-        return index_1
+        return index_1 - 1
 
     @tasks.loop(minutes=30)
     async def update_cached_rankings(self):
@@ -99,7 +99,8 @@ class Ranking(commands.Cog):
         with open('rankings.json', 'r') as f:
             config = json.load(f)
         futures = [self.update_cached_rankings_helper(name) for name in config['cache'].keys()]
-        await asyncio.wait(futures)
+        if len(futures) > 0:
+            await asyncio.wait(futures, timeout=1500)
 
     async def update_cached_rankings_helper(self, name):
         info = {}
@@ -113,6 +114,8 @@ class Ranking(commands.Cog):
         if len(info) > 0:
             print(f'Saving {name} to cache')
             await self.save_to_cache(name, info)
+        else:
+            await self.clear_from_cache(name)
 
     @commands.command()
     async def rankings_track(self, ctx, *, name):
@@ -309,6 +312,15 @@ class Ranking(commands.Cog):
         with open('rankings.json', 'r') as f:
             config = json.load(f)
         return config['cache'].get(name, None)
+
+    async def clear_from_cache(self, name):
+        with open('rankings.json', 'r') as f:
+            config = json.load(f)
+        cached_info = config['cache'].get(name, None)
+        if not cached_info:
+            config['cache'].pop(name)
+            with open('rankings.json', 'w') as f:
+                json.dump(config, f)
 
 def setup(bot):
     bot.add_cog(Ranking(bot))
