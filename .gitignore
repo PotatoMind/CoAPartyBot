@@ -2,3 +2,4 @@ config.json
 settings.json
 rankings.json
 *pycache*
+node_modules
