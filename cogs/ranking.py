@@ -19,7 +19,9 @@ class Ranking(commands.Cog):
             'mining': 'highscores-mining',
             'smithing': 'highscores-smithing',
             'woodcutting': 'highscores-woodcutting',
-            'crafting': 'highscores-crafting'
+            'crafting': 'highscores-crafting',
+	    'cooking': 'highscores-cooking',
+            'fishing': 'highscores-fishing'
         }
         self.level_table = [
             0, 46, 99, 159, 229,
@@ -49,7 +51,7 @@ class Ranking(commands.Cog):
         ]
         self.page_bins = 4
         self.check_pages.start()
-        self.update_cached_rankings.start()
+        #self.update_cached_rankings.start()
 
     @tasks.loop(minutes=30)
     async def check_pages(self):
@@ -252,8 +254,10 @@ class Ranking(commands.Cog):
             tasks.append(self.get_rank_info(mode, name, i, max_page if temp > max_page else mid))
             tasks.append(self.get_rank_info(mode, name, -max_page if temp > max_page else -temp, -mid))
             i = temp
-        done, pending = await asyncio.wait(tasks, timeout=600, return_when=asyncio.FIRST_COMPLETED)
-        [p.cancel() for p in pending]
+        done = None
+        if tasks:
+            done, pending = await asyncio.wait(tasks, timeout=1200, return_when=asyncio.FIRST_COMPLETED)
+            [p.cancel() for p in pending]
         if done:
             return done.pop().result()
         else:
@@ -288,7 +292,7 @@ class Ranking(commands.Cog):
 
         if not found:
             print(mode, name, start_page, end_page)
-            await asyncio.sleep(600)
+            await asyncio.sleep(1200)
         return (mode, (info, color))
 
     def get_level(self, xp):
