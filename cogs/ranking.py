@@ -53,7 +53,7 @@ class Ranking(commands.Cog):
         self.check_pages.start()
         #self.update_cached_rankings.start()
 
-    @tasks.loop(minutes=30)
+    @tasks.loop(minutes=10)
     async def check_pages(self):
         await self.bot.wait_until_ready()
         page_numbers = {mode: 0 for mode in self.ranking_modes.keys()}
@@ -197,10 +197,14 @@ class Ranking(commands.Cog):
                 title=f'Rank Info for {found_name}',
                 color=discord.Color(int(f'0x{color}', 16))
             )
-            embed.set_footer(text=f'{end_time:.2f}s')
+            total_levels = 0
+            total_exp = 0
             for mode, data in info.items():
                 if data:
+                    total_exp += data[1]
+                    total_levels += self.get_level(data[1])
                     embed.add_field(name=mode, value=f'#{data[0]} (LV. {self.get_level(data[1])}) {data[1]:,} XP', inline=False)
+            embed.set_footer(text=f'T: {end_time:.1f}s | Levels: {total_levels:,} | XP: {total_exp:,}')
             await ctx.send(embed=embed)
         else:
             await ctx.send('Player rank info not found!')
@@ -250,13 +254,12 @@ class Ranking(commands.Cog):
         while i < max_page:
             temp = i + split
             mid = (temp + i) // 2
-            # print(i, mid, -temp, -mid)
             tasks.append(self.get_rank_info(mode, name, i, max_page if temp > max_page else mid))
             tasks.append(self.get_rank_info(mode, name, -max_page if temp > max_page else -temp, -mid))
             i = temp
         done = None
         if tasks:
-            done, pending = await asyncio.wait(tasks, timeout=1200, return_when=asyncio.FIRST_COMPLETED)
+            done, pending = await asyncio.wait(tasks, timeout=600, return_when=asyncio.FIRST_COMPLETED)
             [p.cancel() for p in pending]
         if done:
             return done.pop().result()
@@ -267,7 +270,6 @@ class Ranking(commands.Cog):
         info = None
         color = None
         resource = self.ranking_modes[mode]
-        i = 1
         found = False
         async with aiohttp.ClientSession() as cs:
             async with cs.get(f'{self.url}/{resource}.json?p={abs(start_page)}') as r:
@@ -280,11 +282,11 @@ class Ranking(commands.Cog):
                 player = json_data[j]
                 if player['name'].lower() == name:
                     found = True
-                    info = (i, player['xp'], player['name'])
+                    rank = abs(page) * 20 + j
+                    info = (rank, player['xp'], player['name'])
                     color = player['name_color'] if player['name_color'] else '99aab5'
                 else:
                     j += 1
-                i += 1
             page += 1
             async with aiohttp.ClientSession() as cs:
                 async with cs.get(f'{self.url}/{resource}.json?p={abs(page)}') as r:
@@ -292,7 +294,7 @@ class Ranking(commands.Cog):
 
         if not found:
             print(mode, name, start_page, end_page)
-            await asyncio.sleep(1200)
+            await asyncio.sleep(600)
         return (mode, (info, color))
 
     def get_level(self, xp):
