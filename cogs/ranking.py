@@ -91,7 +91,7 @@ class Ranking(commands.Cog):
             if req and len(json.loads(req)) != 0:
                 index_2 = mid + 1
             else:
-                index_1 = mid - 1
+                index_1 = mid
 
         return index_1 - 1
 
@@ -282,7 +282,7 @@ class Ranking(commands.Cog):
                 player = json_data[j]
                 if player['name'].lower() == name:
                     found = True
-                    rank = abs(page) * 20 + j
+                    rank = abs(page) * 20 + j + 1
                     info = (rank, player['xp'], player['name'])
                     color = player['name_color'] if player['name_color'] else '99aab5'
                 else:

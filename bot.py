@@ -7,7 +7,6 @@ from datetime import datetime
 def get_prefix(bot, message):
     with open('config.json', 'r') as f:
         config = json.load(f)
-    
     try:
         prefix = config[str(message.guild.id)]['prefix']
     except:
