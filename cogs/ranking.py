@@ -199,8 +199,9 @@ class Ranking(commands.Cog):
             )
             total_levels = 0
             total_exp = 0
-            for mode, data in info.items():
-                if data:
+            for mode in self.ranking_modes.keys():
+                if mode in info and info[mode]:
+                    data = info[mode]
                     total_exp += data[1]
                     total_levels += self.get_level(data[1])
                     embed.add_field(name=mode, value=f'#{data[0]} (LV. {self.get_level(data[1])}) {data[1]:,} XP', inline=False)
