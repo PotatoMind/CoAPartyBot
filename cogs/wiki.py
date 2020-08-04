@@ -24,7 +24,7 @@ class Wiki(commands.Cog):
         else:
             embed = discord.Embed(
                 title=f'Search for {search_term}',
-                description='\n\n'.join([link for link in req[3]]),
+                description='\n'.join([f'[{req[1][i]}]({req[3][i]})' for i in range(len(req[3][0:10]))]),
                 color=discord.Color.magenta(),
             )
             await ctx.send(embed=embed)
@@ -47,16 +47,9 @@ class Wiki(commands.Cog):
 
         embed = discord.Embed(
             title=f'Search for {search_term}',
+            description='\n'.join([f'[{page_rank[0]}]({self.url}/wiki/{quote(page_rank[0])})' for page_rank in page_ranks[0:10]]),
             color=discord.Color.magenta()
         )
-        i = 0
-        while i < 10 and i < len(page_ranks):
-            embed.add_field(
-                name=f'{page_ranks[i][0]}, {page_ranks[i][1]:.2}', 
-                value=f'{self.url}/wiki/{quote(page_ranks[i][0])}', 
-                inline=False
-            )
-            i += 1
         await ctx.send(embed=embed)
     
     async def wiki_page_prefix_search(self, search_term):

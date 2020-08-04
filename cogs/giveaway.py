@@ -13,8 +13,8 @@ class Giveaway(commands.Cog):
         self.time_lookup = {'s': 1, 'm': 60, 'h': 3600}
         self.time_regex = r'^[0-9]+[smh]?$'
         self.emoji = '\N{PURPLE HEART}'
-        self.lock = asyncio.Lock()
-        self.check_giveaways.start()
+        # self.lock = asyncio.Lock()
+        # self.check_giveaways.start()
 
     @tasks.loop(seconds=5)
     async def check_giveaways(self):
@@ -105,5 +105,5 @@ class Giveaway(commands.Cog):
             json.dump(config, f)
 
 def setup(bot):
-    bot.add_cog(Giveaway(bot))
-    print('Loaded Giveaways')
+    # bot.add_cog(Giveaway(bot))
+    print('Did not load Giveaways')
