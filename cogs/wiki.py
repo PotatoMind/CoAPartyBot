@@ -6,12 +6,77 @@ import aiohttp
 from urllib.parse import quote 
 import textdistance
 import itertools
+from bs4 import BeautifulSoup
 
 class Wiki(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.url = 'https://www.curseofaros.wiki'
-        
+
+    @commands.command()
+    async def wiki(self, ctx, *, page):
+        async with aiohttp.ClientSession() as cs:
+            async with cs.get(f'{self.url}/api.php?action=parse&page={quote(page)}&prop=text&formatversion=2&format=json') as r:
+                req = await r.json()
+
+        if 'error' in req:
+            return await ctx.send('Bad page name. To search using the wiki_search')
+
+        parsed_info = BeautifulSoup(req['parse']['text'], 'lxml')
+        info_table = parsed_info.body.find('table', attrs={'class':'coa-infobox'})
+        rows = info_table.find_all('tr')
+        embed = discord.Embed(
+            title=rows[0].get_text(),
+            description=rows[2].get_text(),
+            url=f'{self.url}/wiki/{quote(page)}',
+            color=discord.Color.green(),
+        )
+        image = rows[1].find("img")
+        if image:
+            embed.set_thumbnail(url=f'{self.url}{image["src"]}')
+        first_level_info = parsed_info.find('p')
+        if first_level_info:
+            embed.add_field(name='Some Info', value=first_level_info.get_text().rstrip())
+        await ctx.send(embed=embed)
+
+    @commands.command()
+    async def wiki_fuzzy(self, ctx, *, page):
+        prefix_page_ranks = await self.wiki_page_prefix_search(page)
+        substring_page_ranks = await self.wiki_page_substring_search(page)
+        combined_page_ranks = prefix_page_ranks + substring_page_ranks
+        if len(combined_page_ranks) == 0:
+            return await ctx.send('Could not find search term!')
+
+        combined_page_ranks.sort(key=lambda x: x[1], reverse=True)
+        page_ranks = []
+        for g in itertools.groupby(combined_page_ranks, lambda x: x[0]):
+            g_list = list(g[1])
+            g_list.sort(key=lambda x: x[1], reverse=True)
+            page_ranks.append(g_list[0])
+        page_ranks.sort(key=lambda x: x[1], reverse=True)
+
+        top_page = page_ranks[0][0]
+        async with aiohttp.ClientSession() as cs:
+            async with cs.get(f'{self.url}/api.php?action=parse&page={quote(top_page)}&prop=text&formatversion=2&format=json') as r:
+                req = await r.json()
+
+        parsed_info = BeautifulSoup(req['parse']['text'], 'lxml')
+        info_table = parsed_info.body.find('table', attrs={'class':'coa-infobox'})
+        rows = info_table.find_all('tr')
+        embed = discord.Embed(
+            title=rows[0].get_text(),
+            description=rows[2].get_text(),
+            url=f'{self.url}/wiki/{quote(top_page)}',
+            color=discord.Color.green(),
+        )
+        image = rows[1].find("img")
+        if image:
+            embed.set_thumbnail(url=f'{self.url}{image["src"]}')
+        first_level_info = parsed_info.find('p')
+        if first_level_info:
+            embed.add_field(name='Some Info', value=first_level_info.get_text().rstrip())
+        await ctx.send(embed=embed)
+
     @commands.command()
     async def wiki_search(self, ctx, *, search_term):
         async with aiohttp.ClientSession() as cs:
