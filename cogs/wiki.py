@@ -22,8 +22,12 @@ class Wiki(commands.Cog):
         if 'error' in req:
             return await ctx.send('Bad page name. To search using the wiki_search')
 
-        parsed_info = BeautifulSoup(req['parse']['text'], 'lxml')
-        info_table = parsed_info.body.find('table', attrs={'class':'coa-infobox'})
+        parsed_info = BeautifulSoup(req['parse']['text'], 'html.parser')
+        info_table = parsed_info.find('table', attrs={'class':'coa-infobox'})
+
+        if not info_table:
+            return await ctx.send('This page is not supported!')
+
         rows = info_table.find_all('tr')
         embed = discord.Embed(
             title=rows[0].get_text(),
@@ -60,8 +64,12 @@ class Wiki(commands.Cog):
             async with cs.get(f'{self.url}/api.php?action=parse&page={quote(top_page)}&prop=text&formatversion=2&format=json') as r:
                 req = await r.json()
 
-        parsed_info = BeautifulSoup(req['parse']['text'], 'lxml')
-        info_table = parsed_info.body.find('table', attrs={'class':'coa-infobox'})
+        parsed_info = BeautifulSoup(req['parse']['text'], 'html.parser')
+        info_table = parsed_info.find('table', attrs={'class':'coa-infobox'})
+
+        if not info_table:
+            return await ctx.send('This page is not supported!')
+
         rows = info_table.find_all('tr')
         embed = discord.Embed(
             title=rows[0].get_text(),
@@ -93,7 +101,7 @@ class Wiki(commands.Cog):
                 color=discord.Color.magenta(),
             )
             await ctx.send(embed=embed)
-    
+
     @commands.command(aliases=['wsf'])
     async def wiki_search_fuzzy(self, ctx, *, search_term):
         prefix_page_ranks = await self.wiki_page_prefix_search(search_term)
@@ -116,7 +124,7 @@ class Wiki(commands.Cog):
             color=discord.Color.magenta()
         )
         await ctx.send(embed=embed)
-    
+
     async def wiki_page_prefix_search(self, search_term):
         page_ranks = []
         url_options = f'action=query&list=allpages&aplimit=500&apprefix={search_term.split()[0]}&format=json'
@@ -128,7 +136,7 @@ class Wiki(commands.Cog):
             substr_distance = textdistance.lcsstr.normalized_similarity(page['title'].lower().split(), search_term.lower().split())
             page_ranks.append((page['title'], (levenstein_distance + substr_distance)/2))
         return page_ranks
-    
+
     async def wiki_page_substring_search(self, search_term):
         tokens = search_term.split()
         page_ranks = []
@@ -142,7 +150,7 @@ class Wiki(commands.Cog):
                 substr_distance = textdistance.lcsstr.normalized_similarity(page['title'].lower().split(), search_term.lower().split())
                 page_ranks.append((page['title'], (levenstein_distance + substr_distance)/2))
         return page_ranks
-        
+
 def setup(bot):
     bot.add_cog(Wiki(bot))
     print('Loaded Wiki')
