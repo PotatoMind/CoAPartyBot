@@ -21,7 +21,7 @@ class Ranking(commands.Cog):
             'woodcutting': 'highscores-woodcutting',
             'crafting': 'highscores-crafting',
             'fishing': 'highscores-fishing',
-	    'cooking': 'highscores-cooking'
+	        'cooking': 'highscores-cooking'
         }
         self.level_table = [
             0, 46, 99, 159, 229,
@@ -51,7 +51,49 @@ class Ranking(commands.Cog):
         ]
         self.page_bins = 4
         self.check_pages.start()
+        self.get_stats.start()
         #self.update_cached_rankings.start()
+
+    @tasks.loop(hours=24)
+    async def get_stats(self):
+        await self.bot.wait_until_ready()
+        # prepare stats variables
+        current_time = datetime.datetime.now().isoformat()
+        with open('stats.json', 'r') as f:
+            stats = json.load(f)
+
+        # gimme those max page stats
+        with open('rankings.json', 'r') as f:
+            rankings = json.load(f)
+        max_pages = rankings['max_pages']
+        if 'max_pages' not in stats:
+            stats['max_pages'] = {}
+        stats['max_pages'][current_time] = max_pages
+
+        # gimme those frequency stats
+        if 'level_frequencies' not in stats:
+            stats['level_frequencies'] = {}
+        for mode, resource in self.ranking_modes.items():
+            page = 0
+            level_amounts = {i: 0 for i in range(1, 116)}
+            async with aiohttp.ClientSession() as cs:
+                async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
+                    req = await r.text()
+            while req and len(json.loads(req)) != 0:
+                json_data = json.loads(req)
+                for person in json_data:
+                    level_amounts[self.get_level(person['xp'])] += 1
+                page += 1
+                async with aiohttp.ClientSession() as cs:
+                    async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
+                        req = await r.text()
+            if mode not in stats['level_frequencies']:
+                stats['level_frequencies'][mode] = {}
+            stats['level_frequencies'][mode][current_time] = level_amounts
+
+        # dump all the stats into a single fucking file like a true programmer
+        with open('stats.json', 'w') as f:
+            json.dump(stats, f)
 
     @tasks.loop(minutes=10)
     async def check_pages(self):

@@ -33,7 +33,7 @@ class Wiki(commands.Cog):
             title=rows[0].get_text(),
             description=rows[2].get_text(),
             url=f'{self.url}/wiki/{quote(page)}',
-            color=discord.Color.green(),
+            color=discord.Color.blue(),
         )
         image = rows[1].find("img")
         if image:

@@ -1,5 +1,6 @@
 config.json
 settings.json
 rankings.json
+stats.json
 *pycache*
 node_modules
