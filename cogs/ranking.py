@@ -73,6 +73,7 @@ class Ranking(commands.Cog):
         # gimme those frequency stats
         if 'level_frequencies' not in stats:
             stats['level_frequencies'] = {}
+        stats['level_frequencies'][current_time] = {}
         for mode, resource in self.ranking_modes.items():
             page = 0
             level_amounts = {i: 0 for i in range(1, 116)}
@@ -87,9 +88,7 @@ class Ranking(commands.Cog):
                 async with aiohttp.ClientSession() as cs:
                     async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
                         req = await r.text()
-            if mode not in stats['level_frequencies']:
-                stats['level_frequencies'][mode] = {}
-            stats['level_frequencies'][mode][current_time] = level_amounts
+            stats['level_frequencies'][current_time][mode] = level_amounts
 
         # dump all the stats into a single fucking file like a true programmer
         with open('stats.json', 'w') as f:
@@ -223,7 +222,7 @@ class Ranking(commands.Cog):
         found_name = None
         futures = [self.set_rank_tasks(mode, name) for mode in rank_mode_sub]
         start_time = time.time()
-        done, pending = await asyncio.wait(futures)
+        done, _ = await asyncio.wait(futures)
         end_time = time.time() - start_time
         for task in done:
             player_ranks = task.result()
