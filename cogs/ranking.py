@@ -21,7 +21,7 @@ class Ranking(commands.Cog):
             'woodcutting': 'highscores-woodcutting',
             'crafting': 'highscores-crafting',
             'fishing': 'highscores-fishing',
-	        'cooking': 'highscores-cooking'
+	    'cooking': 'highscores-cooking'
         }
         self.level_table = [
             0, 46, 99, 159, 229,
