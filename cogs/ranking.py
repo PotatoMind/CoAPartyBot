@@ -70,9 +70,12 @@ class Ranking(commands.Cog):
             stats['max_pages'] = {}
         stats['max_pages'][current_time] = max_pages
 
-        # gimme those frequency stats
+        # gimme those frequency stats and total levels
         if 'level_frequencies' not in stats:
             stats['level_frequencies'] = {}
+        if 'total_levels' not in stats:
+            stats['total_levels'] = {}
+        stats['total_levels'][current_time] = {}
         stats['level_frequencies'][current_time] = {}
         for mode, resource in self.ranking_modes.items():
             page = 0
@@ -83,7 +86,14 @@ class Ranking(commands.Cog):
             while req and len(json.loads(req)) != 0:
                 json_data = json.loads(req)
                 for person in json_data:
-                    level_amounts[self.get_level(person['xp'])] += 1
+                    xp = person['xp']
+                    level = self.get_level(xp)
+                    name = person['name']
+                    if name not in stats['level_frequencies'][current_time]:
+                        stats['level_frequencies'][current_time][name] = {'xp': 0, 'level': 0}
+                    stats['level_frequencies'][current_time][name]['xp'] += xp
+                    stats['level_frequencies'][current_time][name]['level'] += level
+                    level_amounts[level] += 1
                 page += 1
                 async with aiohttp.ClientSession() as cs:
                     async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
