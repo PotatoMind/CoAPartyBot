@@ -51,7 +51,7 @@ class Ranking(commands.Cog):
         ]
         self.page_bins = 4
         self.check_pages.start()
-        self.get_stats.start()
+        #self.get_stats.start()
         #self.update_cached_rankings.start()
 
     @tasks.loop(hours=24)
@@ -84,15 +84,17 @@ class Ranking(commands.Cog):
                 async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
                     req = await r.text()
             while req and len(json.loads(req)) != 0:
+                if page % 499 == 0:
+                    print(page)
                 json_data = json.loads(req)
                 for person in json_data:
                     xp = person['xp']
                     level = self.get_level(xp)
                     name = person['name']
-                    if name not in stats['level_frequencies'][current_time]:
-                        stats['level_frequencies'][current_time][name] = {'xp': 0, 'level': 0}
-                    stats['level_frequencies'][current_time][name]['xp'] += xp
-                    stats['level_frequencies'][current_time][name]['level'] += level
+                    if name not in stats['total_levels'][current_time]:
+                        stats['total_levels'][current_time][name] = {'xp': 0, 'level': 0}
+                    stats['total_levels'][current_time][name]['xp'] += xp
+                    stats['total_levels'][current_time][name]['level'] += level
                     level_amounts[level] += 1
                 page += 1
                 async with aiohttp.ClientSession() as cs:
