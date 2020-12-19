@@ -167,7 +167,8 @@ class Ranking(commands.Cog):
             table = PrettyTable()
             table.field_names = ['Rank', 'Name', _type.upper()]
             for i, p in enumerate(player_infos):
-                table.add_row([i+start, p['name'], p[f'total_{_type}']])
+                total = p[f'total_{_type}']
+                table.add_row([i+start, p['name'], f'{total:,}'])
 
             await ctx.send(f'```diff\n{table}\n```')
     
