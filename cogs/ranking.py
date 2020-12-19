@@ -210,7 +210,6 @@ class Ranking(commands.Cog):
                 found_name = sub_info[2]
             info[player_ranks[0]] = sub_info
         if found_name:
-            await self.save_to_cache(name, info)
             embed = discord.Embed(
                 title=f'Rank Info for {found_name}',
                 color=discord.Color(int(f'0x{color}', 16))
