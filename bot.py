@@ -3,6 +3,7 @@ from discord.ext import commands
 import os
 import json
 from datetime import datetime
+from pymongo import MongoClient
 
 def get_prefix(bot, message):
     with open('config.json', 'r') as f:
@@ -28,4 +29,6 @@ with open('settings.json', 'r') as f:
 
 token = settings['token']
 bot.owner_id = settings['owner_id']
+client = MongoClient(settings['mongo_uri'])
+bot.db = client['coa']
 bot.run(token)
