@@ -9,6 +9,7 @@ import asyncio
 import time
 import math
 import datetime
+import pymongo
 
 class Ranking(commands.Cog):
     def __init__(self, bot):
@@ -21,7 +22,7 @@ class Ranking(commands.Cog):
             'woodcutting': 'highscores-woodcutting',
             'crafting': 'highscores-crafting',
             'fishing': 'highscores-fishing',
-	    'cooking': 'highscores-cooking'
+	        'cooking': 'highscores-cooking'
         }
         self.level_table = [
             0, 46, 99, 159, 229,
@@ -52,60 +53,44 @@ class Ranking(commands.Cog):
         ]
         self.page_bins = 4
         self.check_pages.start()
-        #self.get_stats.start()
-        #self.update_cached_rankings.start()
+        self.get_player_info.start()
 
     @tasks.loop(hours=24)
-    async def get_stats(self):
+    async def get_player_info(self):
         await self.bot.wait_until_ready()
-        # prepare stats variables
-        current_time = datetime.datetime.now().isoformat()
-        with open('stats.json', 'r') as f:
-            stats = json.load(f)
-
-        # gimme those max page stats
-        with open('rankings.json', 'r') as f:
-            rankings = json.load(f)
-        max_pages = rankings['max_pages']
-        if 'max_pages' not in stats:
-            stats['max_pages'] = {}
-        stats['max_pages'][current_time] = max_pages
-
-        # gimme those frequency stats and total levels
-        if 'level_frequencies' not in stats:
-            stats['level_frequencies'] = {}
-        if 'total_levels' not in stats:
-            stats['total_levels'] = {}
-        stats['total_levels'][current_time] = {}
-        stats['level_frequencies'][current_time] = {}
+        curr_time = datetime.datetime.now().isoformat()
         for mode, resource in self.ranking_modes.items():
             page = 0
-            level_amounts = {i: 0 for i in range(1, 116)}
             async with aiohttp.ClientSession() as cs:
                 async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
                     req = await r.text()
             while req and len(json.loads(req)) != 0:
                 if page % 499 == 0:
-                    print(page)
+                    print(f'Progress for get_levels of {mode}: {page}')
                 json_data = json.loads(req)
                 for person in json_data:
                     xp = person['xp']
                     level = self.get_level(xp)
                     name = person['name']
-                    if name not in stats['total_levels'][current_time]:
-                        stats['total_levels'][current_time][name] = {'xp': 0, 'level': 0}
-                    stats['total_levels'][current_time][name]['xp'] += xp
-                    stats['total_levels'][current_time][name]['level'] += level
-                    level_amounts[level] += 1
+                    player_info = self.bot.db.players.find_one({'name': name})
+                    if not player_info:
+                        player_info = {}
+                        player_info['name'] = name
+                        for mode in self.ranking_modes.keys():
+                            player_info[f'{mode}_xp'] = 0
+                            player_info[f'{mode}_level'] = 1
+                        player_info['total_xp'] = 0
+                        player_info['total_levels'] = len(self.ranking_modes)
+                    player_info['last_update'] = curr_time
+                    player_info['total_xp'] = (player_info['total_xp'] - player_info[f'{mode}_xp']) + xp
+                    player_info['total_levels'] = (player_info['total_levels'] - player_info[f'{mode}_level']) + level
+                    player_info[f'{mode}_xp'] = xp
+                    player_info[f'{mode}_level'] = level
+                    self.bot.db.players.replace_one({'name': name}, player_info, upsert=True)
                 page += 1
                 async with aiohttp.ClientSession() as cs:
                     async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
                         req = await r.text()
-            stats['level_frequencies'][current_time][mode] = level_amounts
-
-        # dump all the stats into a single fucking file like a true programmer
-        with open('stats.json', 'w') as f:
-            json.dump(stats, f)
 
     @tasks.loop(minutes=10)
     async def check_pages(self):
@@ -114,7 +99,6 @@ class Ranking(commands.Cog):
 
         for mode, resource in self.ranking_modes.items():
             page_numbers[mode] = await self.get_max_page(resource)
-            print(resource, page_numbers[mode])
 
         with open('rankings.json', 'r') as f:
             config = json.load(f)
@@ -149,42 +133,6 @@ class Ranking(commands.Cog):
 
         return index_1 - 1
 
-    @tasks.loop(minutes=30)
-    async def update_cached_rankings(self):
-        await self.bot.wait_until_ready()
-        with open('rankings.json', 'r') as f:
-            config = json.load(f)
-        futures = [self.update_cached_rankings_helper(name) for name in config['cache'].keys()]
-        if len(futures) > 0:
-            await asyncio.wait(futures, timeout=1500)
-
-    async def update_cached_rankings_helper(self, name):
-        info = {}
-        futures = [self.set_rank_tasks(mode, name) for mode in self.ranking_modes.keys()]
-        done, pending = await asyncio.wait(futures)
-        for task in done:
-            player_ranks = task.result()
-            sub_info, temp_color = player_ranks[1]
-            if sub_info:
-                info[player_ranks[0]] = sub_info
-        if len(info) > 0:
-            print(f'Saving {name} to cache')
-            await self.save_to_cache(name, info)
-        else:
-            await self.clear_from_cache(name)
-
-    @commands.command()
-    async def rankings_track(self, ctx, *, name):
-        with open('rankings.json', 'r') as f:
-            config = json.load(f)
-        if config['cache'].get(name.lower(), None):
-            await ctx.send(f'{name} is already being tracked!')
-        else:
-            config['cache'][name.lower()] = []
-            with open('rankings.json', 'w') as f:
-                json.dump(config, f)
-            await ctx.send(f'Tracking started for {name}.')
-
     @commands.command()
     async def rankings(self, ctx, mode='xp', page='1'):
         if mode not in self.ranking_modes:
@@ -208,6 +156,21 @@ class Ranking(commands.Cog):
             max_page = config['max_pages'].get(mode, 'NA')
             await ctx.send(f'```diff\n{table}\n*** Page {page} / {max_page} ***\n```')
 
+    @commands.command()
+    async def rankings_total(self, ctx, _type='xp', start=1, end=20):
+        if _type != 'xp' and _type != 'levels':
+            await ctx.send('Could not find type.\nAcceptable types: xp, levels')
+        elif start < 1 or start >= end or end - start + 1 > 50:
+            await ctx.send('Bad index range. Make sure start < end, both are positive values, and the range is < 50')
+        else:
+            player_infos = self.bot.db.players.find().sort(f'total_{_type}', pymongo.DESCENDING)[start-1:end+1]
+            table = PrettyTable()
+            table.field_names = ['Rank', 'Name', _type.upper()]
+            for i, p in enumerate(player_infos):
+                table.add_row([i+start, p['name'], p[f'total_{_type}']])
+
+            await ctx.send(f'```diff\n{table}\n```')
+    
     @commands.command(aliases=['rsearch', 'rs', 'rankingss'])
     async def rankings_search(self, ctx, *, name=None):
         return await self.rank_search_helper(ctx, [mode for mode in self.ranking_modes.keys()], name)
@@ -358,30 +321,11 @@ class Ranking(commands.Cog):
             level += 1
         return level
 
-    async def save_to_cache(self, name, info):
-        with open('rankings.json', 'r') as f:
-            config = json.load(f)
-        cached_info = config['cache'].get(name, None)
-        if not cached_info:
-            cached_info = []
-        cached_info.append((info, datetime.datetime.now().isoformat()))
-        config['cache'][name] = cached_info
-        with open('rankings.json', 'w') as f:
-            json.dump(config, f)
+    async def save_to_db(self, name, info):
+        self.db.players.update_one({'name': name}, {'$set': info})
 
-    async def get_from_cache(self, name):
-        with open('rankings.json', 'r') as f:
-            config = json.load(f)
-        return config['cache'].get(name, None)
-
-    async def clear_from_cache(self, name):
-        with open('rankings.json', 'r') as f:
-            config = json.load(f)
-        cached_info = config['cache'].get(name, None)
-        if not cached_info:
-            config['cache'].pop(name)
-            with open('rankings.json', 'w') as f:
-                json.dump(config, f)
+    async def get_from_db(self, name):
+        return self.db.players.find_one({'name': name})
 
 def setup(bot):
     bot.add_cog(Ranking(bot))
