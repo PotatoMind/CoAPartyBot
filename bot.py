@@ -4,6 +4,7 @@ import os
 import json
 from datetime import datetime
 from pymongo import MongoClient
+from pymongo.collation import Collation
 
 def get_prefix(bot, message):
     with open('config.json', 'r') as f:
@@ -31,4 +32,6 @@ token = settings['token']
 bot.owner_id = settings['owner_id']
 client = MongoClient(settings['mongo_uri'])
 bot.db = client['coa']
+bot.db.create_collection('players', collation=Collation(locale='en', strength=1))
+bot.db.players.create_index('name', unique=True)
 bot.run(token)
