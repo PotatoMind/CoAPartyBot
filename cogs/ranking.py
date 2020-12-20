@@ -59,12 +59,15 @@ class Ranking(commands.Cog):
     async def get_player_info(self):
         await self.bot.wait_until_ready()
         curr_time = datetime.datetime.now().isoformat()
+        with open('rankings.json', 'r') as f:
+            config = json.load(f)
         for mode, resource in self.ranking_modes.items():
             page = 0
+            max_page = config['max_pages'][mode]
             async with aiohttp.ClientSession() as cs:
                 async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
                     req = await r.text()
-            while req and len(json.loads(req)) != 0:
+            while page < max_page:
                 if page % 499 == 0:
                     print(f'Progress for get_levels of {mode}: {page}')
                 json_data = json.loads(req)
