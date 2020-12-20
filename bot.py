@@ -32,5 +32,5 @@ token = settings['token']
 bot.owner_id = settings['owner_id']
 client = MongoClient(settings['mongo_uri'])
 bot.db = client['coa']
-bot.db.players.create_index('name', unique=True, collation=Collation(locale='en', strength=1))
+bot.db.players.create_index('name', collation=Collation(locale='en', caseLevel=True))
 bot.run(token)
