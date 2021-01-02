@@ -54,8 +54,6 @@ class Ranking(commands.Cog):
         self.page_bins = 4
         self.check_pages.start()
         self.player_cache_to_db.start()
-        self.player_cache_check.start()
-        self.player_db_check.start()
 
     @tasks.loop(hours=168)
     async def player_cache_to_db(self):
