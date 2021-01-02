@@ -8,6 +8,10 @@ services:
       - .:/app
     depends_on:
       - mongo
+      - redis
 
   mongo:
     image: mongo:4.4.1
+
+  redis:
+    image: redis:6.0.9

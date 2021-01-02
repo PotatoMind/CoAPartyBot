@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from pymongo import MongoClient
 from pymongo.collation import Collation
+from redis.client import Redis
 
 def get_prefix(bot, message):
     with open('config.json', 'r') as f:
@@ -30,7 +31,10 @@ with open('settings.json', 'r') as f:
 
 token = settings['token']
 bot.owner_id = settings['owner_id']
-client = MongoClient(settings['mongo_uri'])
-bot.db = client['coa']
-bot.db.players.create_index('name', collation=Collation(locale='en', caseLevel=True))
+mongo_client = MongoClient(settings['mongo_uri'])
+bot.db = mongo_client['coa']
+player_cache = Redis.from_url(settings['redis_url'], db=0)
+max_page_cache = Redis.from_url(settings['redis_url'], db=1)
+bot.player_cache = player_cache
+bot.max_page_cache = max_page_cache
 bot.run(token)

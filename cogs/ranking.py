@@ -53,63 +53,35 @@ class Ranking(commands.Cog):
         ]
         self.page_bins = 4
         self.check_pages.start()
-        self.get_player_info.start()
+        self.player_cache_to_db.start()
+        self.player_cache_check.start()
+        self.player_db_check.start()
 
-    @tasks.loop(hours=24)
-    async def get_player_info(self):
+    @tasks.loop(hours=168)
+    async def player_cache_to_db(self):
         await self.bot.wait_until_ready()
-        curr_time = datetime.datetime.now().isoformat()
-        with open('rankings.json', 'r') as f:
-            config = json.load(f)
-        for mode, resource in self.ranking_modes.items():
-            page = 0
-            max_page = config['max_pages'][mode]
-            async with aiohttp.ClientSession() as cs:
-                async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
-                    req = await r.text()
-            while page < max_page:
-                if page % 499 == 0:
-                    print(f'Progress for get_levels of {mode}: {page}')
-                json_data = json.loads(req)
-                for person in json_data:
-                    xp = person['xp']
-                    level = self.get_level(xp)
-                    name = person['name']
-                    player_info = self.bot.db.players.find_one({'name': name})
-                    if not player_info:
-                        player_info = {}
-                        player_info['name'] = name
-                        for mode in self.ranking_modes.keys():
-                            player_info[f'{mode}_xp'] = 0
-                            player_info[f'{mode}_level'] = 1
-                        player_info['total_xp'] = 0
-                        player_info['total_levels'] = len(self.ranking_modes)
-                    player_info['last_update'] = curr_time
-                    player_info['total_xp'] = (player_info['total_xp'] - player_info[f'{mode}_xp']) + xp
-                    player_info['total_levels'] = (player_info['total_levels'] - player_info[f'{mode}_level']) + level
-                    player_info[f'{mode}_xp'] = xp
-                    player_info[f'{mode}_level'] = level
-                    self.bot.db.players.replace_one({'name': name}, player_info, upsert=True)
-                page += 1
-                async with aiohttp.ClientSession() as cs:
-                    async with cs.get(f'{self.url}/{resource}.json?p={page}') as r:
-                        req = await r.text()
+        print('Saving cache to db')
+        for name in self.bot.player_cache.scan_iter('*'):
+            name_decoded = name.decode()
+            player_info = await self.get_player_from_cache(name)
+            player_info = {k.decode(): int(v.decode()) for k, v in player_info.items()}
+            player_info['name'] = name_decoded
+            await self.set_player_in_db(name_decoded, player_info)
+            self.bot.player_cache.delete(name)
+        print('Finished saving cache to db')
 
-    @tasks.loop(minutes=10)
+    @tasks.loop(minutes=30)
     async def check_pages(self):
         await self.bot.wait_until_ready()
-        page_numbers = {mode: 0 for mode in self.ranking_modes.keys()}
+        max_pages = {mode: 0 for mode in self.ranking_modes.keys()}
 
         for mode, resource in self.ranking_modes.items():
-            page_numbers[mode] = await self.get_max_page(resource)
+            max_pages[mode] = await self.check_pages_helper(resource)
 
-        with open('rankings.json', 'r') as f:
-            config = json.load(f)
-        config['max_pages'] = page_numbers
-        with open('rankings.json', 'w') as f:
-            json.dump(config, f)
+        self.bot.max_page_cache.hmset('max_pages', max_pages)
+        print(f'Saved max pages {max_pages}')
 
-    async def get_max_page(self, resource):
+    async def check_pages_helper(self, resource):
         index_1 = 1
         index_2 = 1
         async with aiohttp.ClientSession() as cs:
@@ -135,6 +107,54 @@ class Ranking(commands.Cog):
                 index_1 = mid
 
         return index_1 - 1
+    
+    async def level_binary_search(self, level, mode):
+        resource = self.ranking_modes[mode]
+
+        low = 0
+        high = await self.get_max_page(mode)
+
+        while low <= high: 
+            mid = (low + high) // 2
+
+            async with aiohttp.ClientSession() as cs:
+                async with cs.get(f'{self.url}/{resource}.json?p={mid}') as r:
+                    req = await r.text()
+            data = json.loads(req)
+            last_level = self.get_level(data[0]['xp'])
+
+            if last_level > level:
+                low = mid + 1
+            elif last_level < level: 
+                high = mid - 1
+            else:
+                low = mid + 1
+
+        return high
+        
+    async def get_max_page(self, mode):
+        max_pages = self.bot.max_page_cache.hgetall('max_pages')
+        if max_pages:
+            return int(max_pages[mode.encode()].decode())
+        else:
+            return await self.check_pages_helper(self.ranking_modes[mode])
+
+    async def get_player_from_cache(self, name):
+        name = name.lower()
+        return self.bot.player_cache.hgetall(name)
+
+    async def set_player_in_cache(self, name, player_info):
+        name = name.lower()
+        return self.bot.player_cache.hmset(name, player_info)
+
+    async def get_player_from_db(self, name):
+        name = name.lower()
+        return self.bot.db.players.find_one({'name': name})
+
+    async def set_player_in_db(self, name, player_info):
+        name = name.lower()
+        print(name)
+        return self.bot.db.players.replace_one({'name': name}, player_info, upsert=True)
 
     @commands.command()
     async def rankings(self, ctx, mode='xp', page='1'):
@@ -158,22 +178,6 @@ class Ranking(commands.Cog):
                 config = json.load(f)
             max_page = config['max_pages'].get(mode, 'NA')
             await ctx.send(f'```diff\n{table}\n*** Page {page} / {max_page} ***\n```')
-
-    @commands.command()
-    async def rankings_total(self, ctx, _type='xp', start=1, end=20):
-        if _type != 'xp' and _type != 'levels':
-            await ctx.send('Could not find type.\nAcceptable types: xp, levels')
-        elif start < 1 or start >= end or end - start + 1 > 50:
-            await ctx.send('Bad index range. Make sure start < end, both are positive values, and the range is < 50')
-        else:
-            player_infos = self.bot.db.players.find().sort(f'total_{_type}', pymongo.DESCENDING)[start-1:end+1]
-            table = PrettyTable()
-            table.field_names = ['Rank', 'Name', _type.upper()]
-            for i, p in enumerate(player_infos):
-                total = p[f'total_{_type}']
-                table.add_row([i+start, p['name'], f'{total:,}'])
-
-            await ctx.send(f'```diff\n{table}\n```')
     
     @commands.command(aliases=['rsearch', 'rs', 'rankingss'])
     async def rankings_search(self, ctx, *, name=None):
@@ -227,9 +231,12 @@ class Ranking(commands.Cog):
                     embed.add_field(name=mode, value=f'#{data[0]} (LV. {self.get_level(data[1])}) {data[1]:,} XP', inline=False)
             embed.set_footer(text=f'T: {end_time:.1f}s | Levels: {total_levels:,} | XP: {total_exp:,}')
             await ctx.send(embed=embed)
+            player_info = {}
+            for mode, data in info.items():
+                player_info[mode] = self.get_level(data[1])
+            await self.set_player_in_cache(name, player_info)
         else:
             await ctx.send('Player rank info not found!')
-
 
     @commands.command(aliases=['rl'])
     async def rankings_link(self, ctx, *, name):
@@ -266,9 +273,33 @@ class Ranking(commands.Cog):
 
         return config['users'].get(id, None)
 
+    async def get_player_mode_max_page(self, name, mode):
+        # if not found in cache, get from db
+        # if cache found, then get level by convert from bytes to int
+        # if db found, no conversion necessary
+        # if none found, get max page
+        max_page = None
+
+        player_levels = await self.get_player_from_cache(name)
+        if not player_levels:
+            player_levels = await self.get_player_from_db(name)
+            if player_levels and mode in player_levels:
+                level = player_levels[mode]
+                max_page = await self.level_binary_search(level, mode)
+        else:
+            mode_encoded = mode.encode()
+            if mode_encoded in player_levels:
+                level = int(player_levels[mode_encoded].decode())
+                max_page = await self.level_binary_search(level, mode)
+
+        if not max_page:
+            max_page = await self.get_max_page(mode)
+        
+        return max_page
+
     async def set_rank_tasks(self, mode, name):
-        resource = self.ranking_modes[mode]
-        max_page = await self.get_max_page(resource)
+        max_page = await self.get_player_mode_max_page(name, mode)
+
         split = math.ceil(max_page / self.page_bins)
         tasks = []
         i = 0
@@ -296,7 +327,7 @@ class Ranking(commands.Cog):
             async with cs.get(f'{self.url}/{resource}.json?p={abs(start_page)}') as r:
                 req = await r.text()
         page = start_page
-        while req and not found and page < end_page:
+        while req and not found and page <= end_page:
             j = 0
             json_data = json.loads(req)
             while j < len(json_data) and not found:
@@ -314,7 +345,6 @@ class Ranking(commands.Cog):
                     req = await r.text()
 
         if not found:
-            print(mode, name, start_page, end_page)
             await asyncio.sleep(600)
         return (mode, (info, color))
 
@@ -323,12 +353,6 @@ class Ranking(commands.Cog):
         while xp >= self.level_table[level]:
             level += 1
         return level
-
-    async def save_to_db(self, name, info):
-        self.db.players.update_one({'name': name}, {'$set': info})
-
-    async def get_from_db(self, name):
-        return self.db.players.find_one({'name': name})
 
 def setup(bot):
     bot.add_cog(Ranking(bot))
