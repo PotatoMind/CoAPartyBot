@@ -16,7 +16,7 @@ class Ranking(commands.Cog):
         self.bot = bot
         self.url = 'https://curseofaros.com'
         self.ranking_modes = {
-            'xp': 'highscores',
+            'combat': 'highscores',
             'mining': 'highscores-mining',
             'smithing': 'highscores-smithing',
             'woodcutting': 'highscores-woodcutting',
@@ -197,12 +197,18 @@ class Ranking(commands.Cog):
         if len(name) < 3 or len(name) > 14:
             return await ctx.send('Invalid name!')
 
+        embed = discord.Embed(
+            title=f'Loading rank info for {name}',
+            color=discord.Color.purple()
+        )
+        msg = await ctx.send(embed=embed)
+
         name = name.lower()
         rank_mode_sub = [mode for mode in self.ranking_modes.keys() if mode in modes]
         info = {}
         color = None
         found_name = None
-        futures = [self.set_rank_tasks(mode, name) for mode in rank_mode_sub]
+        futures = [self.set_rank_tasks(mode, name, msg) for mode in rank_mode_sub]
         start_time = time.time()
         done, _ = await asyncio.wait(futures)
         end_time = time.time() - start_time
@@ -214,27 +220,26 @@ class Ranking(commands.Cog):
             if not found_name and sub_info:
                 found_name = sub_info[2]
             info[player_ranks[0]] = sub_info
+
+        embed = msg.embeds[0]
         if found_name:
-            embed = discord.Embed(
-                title=f'Rank Info for {found_name}',
-                color=discord.Color(int(f'0x{color}', 16))
-            )
             total_levels = 0
             total_exp = 0
-            for mode in self.ranking_modes.keys():
-                if mode in info and info[mode]:
-                    data = info[mode]
-                    total_exp += data[1]
-                    total_levels += self.get_level(data[1])
-                    embed.add_field(name=mode, value=f'#{data[0]} (LV. {self.get_level(data[1])}) {data[1]:,} XP', inline=False)
-            embed.set_footer(text=f'T: {end_time:.1f}s | Levels: {total_levels:,} | XP: {total_exp:,}')
-            await ctx.send(embed=embed)
             player_info = {}
             for mode, data in info.items():
-                player_info[mode] = self.get_level(data[1])
+                if data:
+                    player_xp = data[1]
+                    player_level = self.get_level(player_xp)
+                    total_exp += player_xp
+                    total_levels += player_level
+                    player_info[mode] = player_level
+            embed.set_footer(text=f'T: {end_time:.1f}s | Levels: {total_levels:,} | XP: {total_exp:,}')
+            await msg.edit(embed=embed)
             await self.set_player_in_cache(name, player_info)
         else:
-            await ctx.send('Player rank info not found!')
+            embed.title = f'Rank info not found for {name}'
+            embed.color = discord.Color.red()
+            await msg.edit(embed=embed)
 
     @commands.command(aliases=['rl'])
     async def rankings_link(self, ctx, *, name):
@@ -295,7 +300,7 @@ class Ranking(commands.Cog):
         
         return max_page
 
-    async def set_rank_tasks(self, mode, name):
+    async def set_rank_tasks(self, mode, name, msg):
         max_page = await self.get_player_mode_max_page(name, mode)
 
         split = math.ceil(max_page / self.page_bins)
@@ -312,7 +317,14 @@ class Ranking(commands.Cog):
             done, pending = await asyncio.wait(tasks, timeout=600, return_when=asyncio.FIRST_COMPLETED)
             [p.cancel() for p in pending]
         if done:
-            return done.pop().result()
+            result = done.pop().result()
+            sub_info, color = result[1]
+            embed = msg.embeds[0]
+            embed.title = f'Rank info for {sub_info[2]}'
+            embed.color = discord.Color(int(f'0x{color}', 16))
+            embed.add_field(name=mode, value=f'#{sub_info[0]} (LV. {self.get_level(sub_info[1])}) {sub_info[1]:,} XP', inline=False)
+            await msg.edit(embed=embed)
+            return result
         else:
             return (mode, (None, None))
 
