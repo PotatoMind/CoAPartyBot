@@ -105,14 +105,14 @@ class Ranking(commands.Cog):
                 index_1 = mid
 
         return index_1 - 1
-    
+
     async def level_binary_search(self, level, mode):
         resource = self.ranking_modes[mode]
 
         low = 0
         high = await self.get_max_page(mode)
 
-        while low <= high: 
+        while low <= high:
             mid = (low + high) // 2
 
             async with aiohttp.ClientSession() as cs:
@@ -123,13 +123,13 @@ class Ranking(commands.Cog):
 
             if last_level > level:
                 low = mid + 1
-            elif last_level < level: 
+            elif last_level < level:
                 high = mid - 1
             else:
                 low = mid + 1
 
         return high
-        
+
     async def get_max_page(self, mode):
         max_pages = self.bot.max_page_cache.hgetall('max_pages')
         if max_pages:
@@ -176,7 +176,7 @@ class Ranking(commands.Cog):
                 config = json.load(f)
             max_page = config['max_pages'].get(mode, 'NA')
             await ctx.send(f'```diff\n{table}\n*** Page {page} / {max_page} ***\n```')
-    
+
     @commands.command(aliases=['rsearch', 'rs', 'rankingss'])
     async def rankings_search(self, ctx, *, name=None):
         return await self.rank_search_helper(ctx, [mode for mode in self.ranking_modes.keys()], name)
@@ -297,7 +297,7 @@ class Ranking(commands.Cog):
 
         if not max_page:
             max_page = await self.get_max_page(mode)
-        
+
         return max_page
 
     async def set_rank_tasks(self, mode, name, msg):
