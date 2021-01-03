@@ -52,6 +52,7 @@ class Ranking(commands.Cog):
             5210672106, sys.maxsize
         ]
         self.page_bins = 4
+        self.lock = asyncio.Lock()
         self.check_pages.start()
         self.player_cache_to_db.start()
 
@@ -319,10 +320,11 @@ class Ranking(commands.Cog):
         if done:
             result = done.pop().result()
             sub_info, color = result[1]
-            embed = msg.embeds[0]
-            embed.title = f'Rank info for {sub_info[2]}'
-            embed.color = discord.Color(int(f'0x{color}', 16))
-            embed.add_field(name=mode, value=f'#{sub_info[0]} (LV. {self.get_level(sub_info[1])}) {sub_info[1]:,} XP', inline=False)
+            async with self.lock:
+                embed = msg.embeds[0]
+                embed.title = f'Rank info for {sub_info[2]}'
+                embed.color = discord.Color(int(f'0x{color}', 16))
+                embed.add_field(name=mode, value=f'#{sub_info[0]} (LV. {self.get_level(sub_info[1])}) {sub_info[1]:,} XP', inline=False)
             await msg.edit(embed=embed)
             return result
         else:
