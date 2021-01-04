@@ -19,16 +19,6 @@ def get_prefix(bot, message):
         prefix = '!'
     return prefix
 
-def json_to_db(collection):
-    with open('rankings.json', 'r') as f:
-        rankings = json.load(f)
-    for author_id, name in rankings['users'].items():
-        link_info = {
-            'author_id': author_id,
-            'name': name
-        }
-        collection.replace_one({'author_id': author_id}, link_info, upsert=True)
-
 bot = commands.Bot(command_prefix=get_prefix)
 bot.launch_time = datetime.utcnow()
 
@@ -43,7 +33,6 @@ token = settings['token']
 bot.owner_id = settings['owner_id']
 mongo_client = MongoClient(settings['mongo_uri'])
 bot.db = mongo_client['coa']
-json_to_db(bot.db.links)
 player_cache = Redis.from_url(settings['redis_url'], db=0)
 max_page_cache = Redis.from_url(settings['redis_url'], db=1)
 bot.player_cache = player_cache
