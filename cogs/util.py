@@ -25,23 +25,15 @@ class Util(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
-        with open('config.json', 'r') as f:
-            config = json.load(f)
-
-        config[str(guild.id)] = {'prefix': '!', 'giveaways': {}}
-
-        with open('config.json', 'w') as f:
-            json.dump(config, f)
+        prefix_info = {
+            'guild_id': str(guild.id),
+            'prefix': '!'
+        }
+        self.bot.db.prefixes.insert_one(prefix_info)
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild):
-        with open('config.json', 'r') as f:
-            config = json.load(f)
-
-        config.pop(str(guild.id))
-
-        with open('config.json', 'w') as f:
-            json.dump(config, f)
+        self.bot.db.prefixes.delete_one({'guild_id': str(guild.id)})
 
     @commands.command()
     async def findmeagf(self, ctx):
@@ -73,7 +65,6 @@ class Util(commands.Cog):
         self.bot.unload_extension(f'cogs.{extension}')
         self.bot.load_extension(f'cogs.{extension}')
 
-
     @commands.command()
     async def ping(self, ctx):
         await ctx.send(f'pong | {round(self.bot.latency * 1000)}ms')
@@ -81,24 +72,14 @@ class Util(commands.Cog):
     @commands.command()
     @commands.has_permissions(administrator=True)
     async def change_prefix(self, ctx, prefix):
-        with open('config.json', 'r') as f:
-            config = json.load(f)
-
-        config[str(ctx.guild.id)]['prefix'] = prefix
-
-        with open('config.json', 'w') as f:
-            json.dump(config, f)
-
-        await ctx.send(f'Changed prefix to "{prefix}"')
+        self.bot.db.prefixes.update_one(
+            {'guild_id': str(ctx.guild.id)},
+            {'$set': {'prefix': prefix}}
+        )
 
     @commands.command()
     async def get_prefix(self, ctx):
-        with open('config.json', 'r') as f:
-            config = json.load(f)
-
-        prefix = config[str(ctx.guild.id)]['prefix']
-
-        await ctx.send(f'Prefix is: {prefix}')
+        return self.bot.db.prefixes.find_one({'guild_id': str(ctx.guild.id)})['prefix']
 
     @commands.command()
     async def about(self, ctx):
