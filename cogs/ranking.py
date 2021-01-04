@@ -173,9 +173,11 @@ class Ranking(commands.Cog):
             for i, p in enumerate(json_data):
                 table.add_row([20*(int(page)-1)+i+1, p['name'], self.get_level(p['xp']), f"{p['xp']:,}"])
 
-            with open('rankings.json', 'r') as f:
-                config = json.load(f)
-            max_page = config['max_pages'].get(mode, 'NA')
+            max_page = self.get_max_page(mode)
+            if max_page:
+                max_page = str(max_page)
+            else:
+                max_page = 'NA'
             await ctx.send(f'```diff\n{table}\n*** Page {page} / {max_page} ***\n```')
 
     @commands.command(aliases=['rsearch', 'rs', 'rankingss'])
@@ -248,35 +250,19 @@ class Ranking(commands.Cog):
         if len(name) < 3 or len(name) > 14:
             return await ctx.send('Invalid name!')
 
-        with open('rankings.json', 'r') as f:
-            config = json.load(f)
-
-        config['users'][str(ctx.author.id)] = name
-
-        with open('rankings.json', 'w') as f:
-            json.dump(config, f)
+        link_info = {
+            'author_id': str(ctx.author.id),
+            'name': name
+        }
+        self.bot.db.links.replace_one({'author_id': str(ctx.author.id)}, link_info, upsert=True)
 
         await ctx.send('Linked account!')
 
-    @commands.command(aliases=['rul'])
-    async def rankings_unlink(self, ctx):
-        with open('rankings.json', 'r') as f:
-            config = json.load(f)
-
-        found = config['users'].pop(str(ctx.author.id), None)
-        if not found:
-            return await ctx.send('Account not found!')
-
-        with open('rankings.json', 'w') as f:
-            json.dump(config, f)
-
-        await ctx.send('Unlinked account!')
-
-    async def get_author_name(self, id):
-        with open('rankings.json', 'r') as f:
-            config = json.load(f)
-
-        return config['users'].get(id, None)
+    async def get_author_name(self, author_id):
+        link_info = self.bot.db.links.find_one({'author_id': author_id})
+        if link_info:
+            return link_info['name']
+        return None
 
     async def get_player_mode_max_page(self, name, mode):
         # if not found in cache, get from db
