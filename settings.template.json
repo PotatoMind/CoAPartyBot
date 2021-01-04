@@ -1,0 +1,6 @@
+{
+    "token": "",
+    "owner_id": "",
+    "mongo_uri": "mongodb://mongo:27017",
+    "redis_url": "redis://redis:6379"
+}
