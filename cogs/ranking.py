@@ -222,25 +222,26 @@ class Ranking(commands.Cog):
                 found_name = sub_info[2]
             info[player_ranks[0]] = sub_info
 
-        embed = msg.embeds[0]
-        if found_name:
-            total_levels = 0
-            total_exp = 0
-            player_info = {}
-            for mode, data in info.items():
-                if data:
-                    player_xp = data[1]
-                    player_level = self.get_level(player_xp)
-                    total_exp += player_xp
-                    total_levels += player_level
-                    player_info[mode] = player_level
-            embed.set_footer(text=f'T: {end_time:.1f}s | Levels: {total_levels:,} | XP: {total_exp:,}')
-            await msg.edit(embed=embed)
-            await self.set_player_in_cache(name, player_info)
-        else:
-            embed.title = f'Rank info not found for {name}'
-            embed.color = discord.Color.red()
-            await msg.edit(embed=embed)
+        async with self.lock:
+            embed = msg.embeds[0]
+            if found_name:
+                total_levels = 0
+                total_exp = 0
+                player_info = {}
+                for mode, data in info.items():
+                    if data:
+                        player_xp = data[1]
+                        player_level = self.get_level(player_xp)
+                        total_exp += player_xp
+                        total_levels += player_level
+                        player_info[mode] = player_level
+                embed.set_footer(text=f'T: {end_time:.1f}s | Levels: {total_levels:,} | XP: {total_exp:,}')
+                await msg.edit(embed=embed)
+                await self.set_player_in_cache(name, player_info)
+            else:
+                embed.title = f'Rank info not found for {name}'
+                embed.color = discord.Color.red()
+                await msg.edit(embed=embed)
 
     @commands.command(aliases=['rl'])
     async def rankings_link(self, ctx, *, name):
