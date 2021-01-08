@@ -53,6 +53,7 @@ class Ranking(commands.Cog):
         ]
         self.page_bins = 4
         self.lock = asyncio.Lock()
+        self.session = aiohttp.ClientSession()
         self.check_pages.start()
         self.player_cache_to_db.start()
 
@@ -80,27 +81,25 @@ class Ranking(commands.Cog):
         self.bot.max_page_cache.hmset('max_pages', max_pages)
         print(f'Saved max pages {max_pages}')
 
+    async def get_page_info(self, link):
+        async with self.session.get(link) as response:
+            return await response.json()
+
     async def check_pages_helper(self, resource):
         index_1 = 1
         index_2 = 1
-        async with aiohttp.ClientSession() as cs:
-            async with cs.get(f'{self.url}/{resource}.json?p={index_1}') as r:
-                req = await r.text()
 
-        while req and len(json.loads(req)) != 0:
+        req = await self.get_page_info(f'{self.url}/{resource}.json?p={index_1}')
+        while req:
             index_2 = index_1
             index_1 = index_1 * 2
-            async with aiohttp.ClientSession() as cs:
-                async with cs.get(f'{self.url}/{resource}.json?p={index_1}') as r:
-                    req = await r.text()
+            req = await self.get_page_info(f'{self.url}/{resource}.json?p={index_1}')
 
         mid = 0
         while index_1 != index_2:
             mid = index_1 + (index_2 - index_1) // 2
-            async with aiohttp.ClientSession() as cs:
-                async with cs.get(f'{self.url}/{resource}.json?p={mid}') as r:
-                    req = await r.text()
-            if req and len(json.loads(req)) != 0:
+            req = await self.get_page_info(f'{self.url}/{resource}.json?p={mid}')
+            if req:
                 index_2 = mid + 1
             else:
                 index_1 = mid
@@ -116,10 +115,7 @@ class Ranking(commands.Cog):
         while low <= high:
             mid = (low + high) // 2
 
-            async with aiohttp.ClientSession() as cs:
-                async with cs.get(f'{self.url}/{resource}.json?p={mid}') as r:
-                    req = await r.text()
-            data = json.loads(req)
+            data = await self.get_page_info(f'{self.url}/{resource}.json?p={mid}')
             last_level = self.get_level(data[0]['xp'])
 
             if last_level > level:
@@ -156,24 +152,21 @@ class Ranking(commands.Cog):
         return self.bot.db.players.replace_one({'name': name}, player_info, upsert=True)
 
     @commands.command()
-    async def rankings(self, ctx, mode='xp', page='1'):
+    async def rankings(self, ctx, mode='combat', page='1'):
         if mode not in self.ranking_modes:
             await ctx.send(f'Could not find mode.\nAcceptable Modes: {", ".join([m for m in self.ranking_modes.keys()])}')
         else:
             resource = self.ranking_modes[mode]
-            async with aiohttp.ClientSession() as cs:
-                async with cs.get(f'{self.url}/{resource}.json?p={int(page)-1}') as r:
-                    req = await r.text()
-            if not req:
+            json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={int(page)-1}')
+            if not json_data:
                 return await ctx.send(f'Ran out of pages!')
-            json_data = json.loads(req)
 
             table = PrettyTable()
             table.field_names = ['Rank', 'Name', 'Level', 'XP']
             for i, p in enumerate(json_data):
                 table.add_row([20*(int(page)-1)+i+1, p['name'], self.get_level(p['xp']), f"{p['xp']:,}"])
 
-            max_page = self.get_max_page(mode)
+            max_page = await self.get_max_page(mode)
             if max_page:
                 max_page = str(max_page)
             else:
@@ -322,13 +315,10 @@ class Ranking(commands.Cog):
         color = None
         resource = self.ranking_modes[mode]
         found = False
-        async with aiohttp.ClientSession() as cs:
-            async with cs.get(f'{self.url}/{resource}.json?p={abs(start_page)}') as r:
-                req = await r.text()
+        json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={abs(start_page)}')
         page = start_page
-        while req and not found and page <= end_page:
+        while json_data and not found and page <= end_page:
             j = 0
-            json_data = json.loads(req)
             while j < len(json_data) and not found:
                 player = json_data[j]
                 if player['name'].lower() == name:
@@ -339,9 +329,7 @@ class Ranking(commands.Cog):
                 else:
                     j += 1
             page += 1
-            async with aiohttp.ClientSession() as cs:
-                async with cs.get(f'{self.url}/{resource}.json?p={abs(page)}') as r:
-                    req = await r.text()
+            json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={abs(page)}')
 
         if not found:
             await asyncio.sleep(600)
