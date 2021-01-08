@@ -305,7 +305,7 @@ class Ranking(commands.Cog):
                 embed.title = f'Rank info for {sub_info[2]}'
                 embed.color = discord.Color(int(f'0x{color}', 16))
                 embed.add_field(name=mode, value=f'#{sub_info[0]} (LV. {self.get_level(sub_info[1])}) {sub_info[1]:,} XP', inline=False)
-            await msg.edit(embed=embed)
+                await msg.edit(embed=embed)
             return result
         else:
             return (mode, (None, None))
