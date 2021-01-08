@@ -76,10 +76,12 @@ class Util(commands.Cog):
             {'guild_id': str(ctx.guild.id)},
             {'$set': {'prefix': prefix}}
         )
+        await ctx.send(f'Changed prefix to {prefix}')
 
     @commands.command()
     async def get_prefix(self, ctx):
-        return self.bot.db.prefixes.find_one({'guild_id': str(ctx.guild.id)})['prefix']
+        prefix = self.bot.db.prefixes.find_one({'guild_id': str(ctx.guild.id)})['prefix']
+        await ctx.send(f'Prefix: {prefix}')
 
     @commands.command()
     async def about(self, ctx):
