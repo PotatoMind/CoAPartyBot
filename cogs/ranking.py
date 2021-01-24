@@ -56,37 +56,41 @@ class Ranking(commands.Cog):
         self.player_cache_to_db.start()
         self.leaderboards_to_db.start()
 
-    @tasks.loop(hours=24)
+    @tasks.loop(hours=168)
     async def leaderboards_to_db(self):
         await self.bot.wait_until_ready()
-        for mode, resource in self.ranking_modes.items():
-            mode_level_key = f'{mode}_level'
-            mode_xp_key = f'{mode}_xp'
-            max_page = await self.get_max_page(mode)
-            for page in range(max_page):
-                if page % 1000 == 0:
-                    print(f'Saving leaderboards to db, {mode}: {page}')
-                json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={page}')
-                for player in json_data:
-                    player_info = await self.bot.db.totals.find_one({'name': player['name']}, {'_id': False})
-                    player_level = self.get_level(player['xp'])
-                    if not player_info:
-                        player_info = {
-                            'name': player['name'],
-                            'total_xp': 0,
-                            'total_level': 0
-                        }
+        tasks = [self.leaderboards_to_db_task(mode, resource) for mode, resource in self.ranking_modes.items()]
+        await asyncio.gather(*tasks)
 
-                    if mode_level_key in player_info:
-                        player_info['total_xp'] -= player_info[mode_xp_key]
-                        player_info['total_level'] -= player_info[mode_level_key]
+    async def leaderboards_to_db_task(self, mode, resource):
+        mode_level_key = f'{mode}_level'
+        mode_xp_key = f'{mode}_xp'
+        max_page = await self.get_max_page(mode)
+        for page in range(max_page):
+            if page % 1000 == 0:
+                print(f'Saving leaderboards to db, {mode}: {page}')
+            json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={page}')
+            for player in json_data:
+                player_name_lower = player['name'].lower()
+                player_info = await self.bot.db.totals.find_one({'name': player_name_lower}, {'_id': False})
+                player_level = self.get_level(player['xp'])
+                if not player_info:
+                    player_info = {
+                        'name': player_name_lower,
+                        'total_xp': 0,
+                        'total_level': 0
+                    }
 
-                    player_info['total_xp'] += player['xp']
-                    player_info['total_level'] += player_level
-                    player_info[mode_level_key] = player_level
-                    player_info[mode_xp_key] = player['xp']
+                if mode_level_key in player_info:
+                    player_info['total_xp'] -= player_info[mode_xp_key]
+                    player_info['total_level'] -= player_info[mode_level_key]
 
-                    await self.bot.db.totals.replace_one({'name': player['name']}, player_info, upsert=True)
+                player_info['total_xp'] += player['xp']
+                player_info['total_level'] += player_level
+                player_info[mode_level_key] = player_level
+                player_info[mode_xp_key] = player['xp']
+
+                await self.bot.db.totals.replace_one({'name': player_name_lower}, player_info, upsert=True)
 
     @commands.command()
     async def rankings_total(self, ctx, _type='xp', start=1, end=20):
