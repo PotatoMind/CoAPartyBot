@@ -69,7 +69,7 @@ class Ranking(commands.Cog):
                 json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={page}')
                 for player in json_data:
                     player_info = await self.bot.db.totals.find_one({'name': player['name']}, {'_id': False})
-                    player_level = player['xp']
+                    player_level = self.get_level(player['xp'])
                     if not player_info:
                         player_info = {
                             'name': player['name'],
