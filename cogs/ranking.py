@@ -7,6 +7,7 @@ from prettytable import PrettyTable
 import asyncio
 import time
 import math
+import pymongo
 
 class Ranking(commands.Cog):
     def __init__(self, bot):
@@ -95,7 +96,7 @@ class Ranking(commands.Cog):
             await ctx.send('Bad index range. Make sure start < end, both are positive values, and the range is < 50')
         else:
             player_infos = self.bot.db.totals.find()
-            player_infos.sort(f'total_{_type}', -1).skip(start-1).limit(end+1)
+            player_infos.sort(f'total_{_type}', pymongo.DESCENDING).skip(start-1).limit(end+1)
 
             table = PrettyTable()
             table.field_names = ['Rank', 'Name', _type.upper()]
