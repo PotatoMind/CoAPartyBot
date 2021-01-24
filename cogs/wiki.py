@@ -1,7 +1,5 @@
 import discord
-from discord.ext import commands, tasks
-import json
-import requests
+from discord.ext import commands
 import aiohttp
 from urllib.parse import quote 
 import textdistance

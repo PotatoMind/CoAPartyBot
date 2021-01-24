@@ -1,15 +1,12 @@
+from os import name
 import discord
 from discord.ext import commands, tasks
-import json
-from urllib.parse import quote
 import aiohttp
 import sys
 from prettytable import PrettyTable
 import asyncio
 import time
 import math
-import datetime
-import pymongo
 
 class Ranking(commands.Cog):
     def __init__(self, bot):
@@ -56,6 +53,60 @@ class Ranking(commands.Cog):
         self.session = aiohttp.ClientSession()
         self.check_pages.start()
         self.player_cache_to_db.start()
+        self.leaderboards_to_db.start()
+
+    @tasks.loop(hours=24)
+    async def leaderboards_to_db(self):
+        await self.bot.wait_until_ready()
+        for mode, resource in self.ranking_modes.items():
+            mode_level_key = f'{mode}_level'
+            mode_xp_key = f'{mode}_xp'
+            max_page = await self.get_max_page(mode)
+            for page in range(max_page):
+                if page % 1000 == 0:
+                    print(f'Saving leaderboards to db, {mode}: {page}')
+                json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={page}')
+                for player in json_data:
+                    player_info = await self.bot.db.totals.find_one({'name': player['name']}, {'_id': False})
+                    player_level = player['xp']
+                    if not player_info:
+                        player_info = {
+                            'name': player['name'],
+                            'total_xp': 0,
+                            'total_level': 0
+                        }
+                    
+                    if mode_level_key in player_info:
+                        player_info['total_xp'] -= player_info[mode_xp_key]
+                        player_info['total_level'] -= player_info[mode_level_key]
+                    
+                    player_info['total_xp'] += player['xp']
+                    player_info['total_level'] += player_level
+                    player_info[mode_level_key] = player_level
+                    player_info[mode_xp_key] = player['xp']
+
+                    await self.bot.db.totals.replace_one({'name': player['name']}, player_info, upsert=True)
+
+    @commands.command()
+    async def rankings_total(self, ctx, _type='xp', start=1, end=20):
+        if _type != 'xp' and _type != 'level':
+            await ctx.send('Could not find type.\nAcceptable types: xp, levels')
+        elif start < 1 or start >= end or end - start + 1 > 50:
+            await ctx.send('Bad index range. Make sure start < end, both are positive values, and the range is < 50')
+        else:
+            player_infos = self.bot.db.totals.find()
+            player_infos.sort(f'total_{_type}', -1).skip(start-1).limit(end+1)
+
+            table = PrettyTable()
+            table.field_names = ['Rank', 'Name', _type.upper()]
+
+            i = 0
+            async for p in player_infos:
+                total = p[f'total_{_type}']
+                table.add_row([i+start, p['name'], f'{total:,}'])
+                i += 1
+
+            await ctx.send(f'```diff\n{table}\n```')
 
     @tasks.loop(hours=168)
     async def player_cache_to_db(self):
@@ -144,12 +195,11 @@ class Ranking(commands.Cog):
 
     async def get_player_from_db(self, name):
         name = name.lower()
-        return self.bot.db.players.find_one({'name': name})
+        return await self.bot.db.players.find_one({'name': name})
 
     async def set_player_in_db(self, name, player_info):
         name = name.lower()
-        print(name)
-        return self.bot.db.players.replace_one({'name': name}, player_info, upsert=True)
+        return await self.bot.db.players.replace_one({'name': name}, player_info, upsert=True)
 
     @commands.command()
     async def rankings(self, ctx, mode='combat', page='1'):
@@ -247,12 +297,12 @@ class Ranking(commands.Cog):
             'author_id': str(ctx.author.id),
             'name': name
         }
-        self.bot.db.links.replace_one({'author_id': str(ctx.author.id)}, link_info, upsert=True)
+        await self.bot.db.links.replace_one({'author_id': str(ctx.author.id)}, link_info, upsert=True)
 
         await ctx.send('Linked account!')
 
     async def get_author_name(self, author_id):
-        link_info = self.bot.db.links.find_one({'author_id': author_id})
+        link_info = await self.bot.db.links.find_one({'author_id': author_id})
         if link_info:
             return link_info['name']
         return None

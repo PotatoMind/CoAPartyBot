@@ -5,6 +5,6 @@ prettytable==0.7.2
 psutil==5.6.6
 textdistance==4.2.0
 requests==2.25.1
-bs4==0.0.1 
-pymongo==3.11.2
+bs4==0.0.1
+motor==2.3.0
 redis==3.5.3

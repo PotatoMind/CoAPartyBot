@@ -1,15 +1,13 @@
-import discord
 from discord.ext import commands
 import os
 import json
 from datetime import datetime
-from pymongo import MongoClient
-from pymongo.collation import Collation
+from motor.motor_asyncio import AsyncIOMotorClient
 from redis.client import Redis
 
-def get_prefix(bot, message):
+async def get_prefix(bot, message):
     guild_id = str(message.guild.id)
-    prefix_info = bot.db.prefixes.find_one({'guild_id': guild_id})
+    prefix_info = await bot.db.prefixes.find_one({'guild_id': guild_id})
     if prefix_info:
         return prefix_info['prefix']
     else:
@@ -17,7 +15,7 @@ def get_prefix(bot, message):
             'guild_id': guild_id,
             'prefix': '!'
         }
-        bot.db.prefixes.insert_one(prefix_info)
+        await bot.db.prefixes.insert_one(prefix_info)
         return '!'
 
 bot = commands.Bot(command_prefix=get_prefix)
@@ -32,8 +30,8 @@ with open('settings.json', 'r') as f:
 
 token = settings['token']
 bot.owner_id = settings['owner_id']
-mongo_client = MongoClient(settings['mongo_uri'])
-bot.db = mongo_client['coa']
+motor_client = AsyncIOMotorClient(settings['mongo_uri'])
+bot.db = motor_client['coa']
 player_cache = Redis.from_url(settings['redis_url'], db=0)
 max_page_cache = Redis.from_url(settings['redis_url'], db=1)
 bot.player_cache = player_cache

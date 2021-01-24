@@ -1,11 +1,9 @@
 import discord
 from discord.ext import commands, tasks
 from itertools import cycle
-import json
 from datetime import datetime
 import pkg_resources
 import psutil
-import time
 import random
 
 class Util(commands.Cog):
@@ -29,11 +27,11 @@ class Util(commands.Cog):
             'guild_id': str(guild.id),
             'prefix': '!'
         }
-        self.bot.db.prefixes.insert_one(prefix_info)
+        await self.bot.db.prefixes.insert_one(prefix_info)
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild):
-        self.bot.db.prefixes.delete_one({'guild_id': str(guild.id)})
+        await self.bot.db.prefixes.delete_one({'guild_id': str(guild.id)})
 
     @commands.command()
     async def findmeagf(self, ctx):
@@ -72,7 +70,7 @@ class Util(commands.Cog):
     @commands.command()
     @commands.has_permissions(administrator=True)
     async def change_prefix(self, ctx, prefix):
-        self.bot.db.prefixes.update_one(
+        await self.bot.db.prefixes.update_one(
             {'guild_id': str(ctx.guild.id)},
             {'$set': {'prefix': prefix}}
         )
@@ -80,7 +78,7 @@ class Util(commands.Cog):
 
     @commands.command()
     async def get_prefix(self, ctx):
-        prefix = self.bot.db.prefixes.find_one({'guild_id': str(ctx.guild.id)})['prefix']
+        prefix = await self.bot.db.prefixes.find_one({'guild_id': str(ctx.guild.id)})['prefix']
         await ctx.send(f'Prefix: {prefix}')
 
     @commands.command()
