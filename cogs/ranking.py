@@ -76,11 +76,11 @@ class Ranking(commands.Cog):
                             'total_xp': 0,
                             'total_level': 0
                         }
-                    
+
                     if mode_level_key in player_info:
                         player_info['total_xp'] -= player_info[mode_xp_key]
                         player_info['total_level'] -= player_info[mode_level_key]
-                    
+
                     player_info['total_xp'] += player['xp']
                     player_info['total_level'] += player_level
                     player_info[mode_level_key] = player_level
