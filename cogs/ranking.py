@@ -61,7 +61,8 @@ class Ranking(commands.Cog):
     async def leaderboards_to_db(self):
         await self.bot.wait_until_ready()
         tasks = [self.leaderboards_to_db_task(mode, resource) for mode, resource in self.ranking_modes.items()]
-        await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        print(results)
 
     async def leaderboards_to_db_task(self, mode, resource):
         mode_level_key = f'{mode}_level'
@@ -94,17 +95,18 @@ class Ranking(commands.Cog):
                     player_info[mode_xp_key] = player['xp']
 
                     await self.bot.db.totals.replace_one({'name': player_name_lower}, player_info, upsert=True)
+        return True
 
     @commands.command()
-    async def rankings_total(self, ctx, _type='xp', skillers_only=False, start=1, end=20):
+    async def rankings_total(self, ctx, _type='xp', skillers_only=False, start=1, size=20):
         if _type != 'xp' and _type != 'level':
             await ctx.send('Could not find type.\nAcceptable types: xp, levels')
-        elif start < 1 or start >= end or end - start + 1 > 50:
-            await ctx.send('Bad index range. Make sure start < end, both are positive values, and the range is < 50')
+        elif start < 1 or size > 50:
+            await ctx.send('Bad index range. Make sure start is > 0 and size is < 50')
         else:
             filter = {'combat_level': 1} if skillers_only else None
             player_infos = self.bot.db.totals.find(filter)
-            player_infos.sort(f'total_{_type}', pymongo.DESCENDING).skip(start-1).limit(end+1)
+            player_infos.sort(f'total_{_type}', pymongo.DESCENDING).skip(start-1).limit(size)
 
             table = PrettyTable()
             table.field_names = ['Rank', 'Name', _type.upper()]
@@ -252,6 +254,7 @@ class Ranking(commands.Cog):
         if len(name) < 3 or len(name) > 14:
             return await ctx.send('Invalid name!')
 
+        print(f'Starting rank search for {name}')
         embed = discord.Embed(
             title=f'Loading rank info for {name}',
             color=discord.Color.purple()
@@ -297,6 +300,8 @@ class Ranking(commands.Cog):
                 embed.color = discord.Color.red()
                 await msg.edit(embed=embed)
 
+        print(f'Finished rank search for {name}')
+
     @commands.command(aliases=['rl'])
     async def rankings_link(self, ctx, *, name):
         if len(name) < 3 or len(name) > 14:
@@ -309,6 +314,7 @@ class Ranking(commands.Cog):
         await self.bot.db.links.replace_one({'author_id': str(ctx.author.id)}, link_info, upsert=True)
 
         await ctx.send('Linked account!')
+        print(f'Linked account {str(ctx.author.id)} to {name}')
 
     async def get_author_name(self, author_id):
         link_info = await self.bot.db.links.find_one({'author_id': author_id})
@@ -365,8 +371,10 @@ class Ranking(commands.Cog):
                 embed.color = discord.Color(int(f'0x{color}', 16))
                 embed.add_field(name=mode, value=f'#{sub_info[0]} (LV. {self.get_level(sub_info[1])}) {sub_info[1]:,} XP', inline=False)
                 await msg.edit(embed=embed)
+            print(f'Rank info found for {name}, {mode}: {result}')
             return result
         else:
+            print(f'Rank not info found for {name}, {mode}')
             return (mode, (None, None))
 
     async def get_rank_info(self, mode, name, start_page=0, end_page=sys.maxsize):
