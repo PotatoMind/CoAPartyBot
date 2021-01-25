@@ -126,7 +126,7 @@ class Ranking(commands.Cog):
         for name in self.bot.player_cache.scan_iter('*'):
             player_info = await self.get_player_from_cache(name)
             modify_date = datetime.strptime(player_info['modify_date'.encode()].decode(), '%Y-%m-%dT%H:%M:%SZ')
-            if modify_date + timedelta(days=7) < datetime.utcnow():
+            if modify_date + timedelta(days=1) < datetime.utcnow():
                 self.bot.player_cache.delete(name)
                 print(f'Deleted {player_info} from cache')
         print('Finished clearing old cache')
