@@ -51,6 +51,7 @@ class Ranking(commands.Cog):
         ]
         self.page_bins = 4
         self.lock = asyncio.Lock()
+        self.total_lock = asyncio.Lock()
         self.session = aiohttp.ClientSession()
         self.check_pages.start()
         self.player_cache_to_db.start()
@@ -72,34 +73,37 @@ class Ranking(commands.Cog):
             json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={page}')
             for player in json_data:
                 player_name_lower = player['name'].lower()
-                player_info = await self.bot.db.totals.find_one({'name': player_name_lower}, {'_id': False})
                 player_level = self.get_level(player['xp'])
-                if not player_info:
-                    player_info = {
-                        'name': player_name_lower,
-                        'total_xp': 0,
-                        'total_level': 0
-                    }
 
-                if mode_level_key in player_info:
-                    player_info['total_xp'] -= player_info[mode_xp_key]
-                    player_info['total_level'] -= player_info[mode_level_key]
+                async with self.total_lock:
+                    player_info = await self.bot.db.totals.find_one({'name': player_name_lower}, {'_id': False})
+                    if not player_info:
+                        player_info = {
+                            'name': player_name_lower,
+                            'total_xp': 0,
+                            'total_level': 0
+                        }
 
-                player_info['total_xp'] += player['xp']
-                player_info['total_level'] += player_level
-                player_info[mode_level_key] = player_level
-                player_info[mode_xp_key] = player['xp']
+                    if mode_level_key in player_info:
+                        player_info['total_xp'] -= player_info[mode_xp_key]
+                        player_info['total_level'] -= player_info[mode_level_key]
 
-                await self.bot.db.totals.replace_one({'name': player_name_lower}, player_info, upsert=True)
+                    player_info['total_xp'] += player['xp']
+                    player_info['total_level'] += player_level
+                    player_info[mode_level_key] = player_level
+                    player_info[mode_xp_key] = player['xp']
+
+                    await self.bot.db.totals.replace_one({'name': player_name_lower}, player_info, upsert=True)
 
     @commands.command()
-    async def rankings_total(self, ctx, _type='xp', start=1, end=20):
+    async def rankings_total(self, ctx, _type='xp', skillers_only=False, start=1, end=20):
         if _type != 'xp' and _type != 'level':
             await ctx.send('Could not find type.\nAcceptable types: xp, levels')
         elif start < 1 or start >= end or end - start + 1 > 50:
             await ctx.send('Bad index range. Make sure start < end, both are positive values, and the range is < 50')
         else:
-            player_infos = self.bot.db.totals.find()
+            filter = {'combat_level': 1} if skillers_only else None
+            player_infos = self.bot.db.totals.find(filter)
             player_infos.sort(f'total_{_type}', pymongo.DESCENDING).skip(start-1).limit(end+1)
 
             table = PrettyTable()
