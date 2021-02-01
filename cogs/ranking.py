@@ -1,4 +1,4 @@
-from os import name
+from datetime import datetime, timedelta
 import discord
 from discord.ext import commands, tasks
 import aiohttp
@@ -54,7 +54,7 @@ class Ranking(commands.Cog):
         self.total_lock = asyncio.Lock()
         self.session = aiohttp.ClientSession()
         self.check_pages.start()
-        self.player_cache_to_db.start()
+        self.clear_old_cache.start()
         self.leaderboards_to_db.start()
 
     @tasks.loop(hours=168)
@@ -119,18 +119,17 @@ class Ranking(commands.Cog):
 
             await ctx.send(f'```diff\n{table}\n```')
 
-    @tasks.loop(hours=168)
-    async def player_cache_to_db(self):
+    @tasks.loop(hours=24)
+    async def clear_old_cache(self):
         await self.bot.wait_until_ready()
-        print('Saving cache to db')
+        print('Started clearing old cache')
         for name in self.bot.player_cache.scan_iter('*'):
-            name_decoded = name.decode()
             player_info = await self.get_player_from_cache(name)
-            player_info = {k.decode(): int(v.decode()) for k, v in player_info.items()}
-            player_info['name'] = name_decoded
-            await self.set_player_in_db(name_decoded, player_info)
-            self.bot.player_cache.delete(name)
-        print('Finished saving cache to db')
+            modify_date = datetime.strptime(player_info['modify_date'.encode()].decode(), '%Y-%m-%dT%H:%M:%SZ')
+            if modify_date + timedelta(days=1) < datetime.utcnow():
+                self.bot.player_cache.delete(name)
+                print(f'Deleted {player_info} from cache')
+        print('Finished clearing old cache')
 
     @tasks.loop(minutes=30)
     async def check_pages(self):
@@ -292,6 +291,7 @@ class Ranking(commands.Cog):
                         total_exp += player_xp
                         total_levels += player_level
                         player_info[mode] = player_level
+                player_info['modify_date'] = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
                 embed.set_footer(text=f'T: {end_time:.1f}s | Levels: {total_levels:,} | XP: {total_exp:,}')
                 await msg.edit(embed=embed)
                 await self.set_player_in_cache(name, player_info)
