@@ -145,7 +145,7 @@ class Ranking(commands.Cog):
 
     async def get_page_info(self, link):
         async with self.session.get(link) as response:
-            return await response.json()
+            return await response.json(content_type=None)
 
     async def check_pages_helper(self, resource):
         index_1 = 1
