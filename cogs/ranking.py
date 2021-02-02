@@ -50,6 +50,7 @@ class Ranking(commands.Cog):
             5210672106, sys.maxsize
         ]
         self.page_bins = 4
+        self.max_db_pages = 2000
         self.lock = asyncio.Lock()
         self.total_lock = asyncio.Lock()
         self.session = aiohttp.ClientSession()
@@ -57,9 +58,10 @@ class Ranking(commands.Cog):
         self.clear_old_cache.start()
         self.leaderboards_to_db.start()
 
-    @tasks.loop(hours=168)
+    @tasks.loop(hours=24)
     async def leaderboards_to_db(self):
         await self.bot.wait_until_ready()
+        await self.bot.db.totals.drop()
         tasks = [self.leaderboards_to_db_task(mode, resource) for mode, resource in self.ranking_modes.items()]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         print(results)
@@ -68,7 +70,7 @@ class Ranking(commands.Cog):
         mode_level_key = f'{mode}_level'
         mode_xp_key = f'{mode}_xp'
         max_page = await self.get_max_page(mode)
-        for page in range(max_page):
+        while page < max_page and page < self.max_db_pages:
             if page % 1000 == 0:
                 print(f'Saving leaderboards to db, {mode}: {page}')
             json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={page}')
@@ -95,6 +97,7 @@ class Ranking(commands.Cog):
                     player_info[mode_xp_key] = player['xp']
 
                     await self.bot.db.totals.replace_one({'name': player_name_lower}, player_info, upsert=True)
+            page += 1
         return True
 
     @commands.command()
