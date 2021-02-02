@@ -70,6 +70,7 @@ class Ranking(commands.Cog):
         mode_level_key = f'{mode}_level'
         mode_xp_key = f'{mode}_xp'
         max_page = await self.get_max_page(mode)
+        page = 0
         while page < max_page and page < self.max_db_pages:
             if page % 1000 == 0:
                 print(f'Saving leaderboards to db, {mode}: {page}')
