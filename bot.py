@@ -1,3 +1,4 @@
+import discord
 from discord.ext import commands
 import os
 import json
@@ -8,17 +9,18 @@ from redis.client import Redis
 async def get_prefix(bot, message):
     guild_id = str(message.guild.id)
     prefix_info = await bot.db.prefixes.find_one({'guild_id': guild_id})
+    prefix = '!?'
     if prefix_info:
-        return prefix_info['prefix']
+        prefix = prefix_info['prefix']
     else:
         prefix_info = {
             'guild_id': guild_id,
-            'prefix': '!'
+            'prefix': prefix
         }
         await bot.db.prefixes.insert_one(prefix_info)
-        return '!'
+    return commands.when_mentioned_or(prefix)(bot, message)
 
-bot = commands.Bot(command_prefix=get_prefix)
+bot = commands.Bot(command_prefix=get_prefix, activity=discord.Game('Default prefix: !?'))
 bot.launch_time = datetime.utcnow()
 
 for filename in os.listdir('./cogs'):

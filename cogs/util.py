@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands, tasks
-from itertools import cycle
 from datetime import datetime
 import pkg_resources
 import psutil
@@ -9,17 +8,7 @@ import random
 class Util(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.statuses = cycle(['eat the potato', 'bake the potato', 'sleep with potato', 'kill the potato'])
         self.process = psutil.Process()
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        self.change_status.start()
-        print('Bot is ready')
-
-    @tasks.loop(hours=1)
-    async def change_status(self):
-        await self.bot.change_presence(activity=discord.Game(next(self.statuses)))
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
