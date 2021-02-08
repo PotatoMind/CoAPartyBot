@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import discord
 from discord.ext import commands, tasks
 import aiohttp
+from aiohttp import ClientOSError
 import sys
 from prettytable import PrettyTable
 import asyncio
@@ -51,6 +52,7 @@ class Ranking(commands.Cog):
         ]
         self.page_bins = 4
         self.max_db_pages = 2000
+        self.total_connection_retries = 5
         self.lock = asyncio.Lock()
         self.total_lock = asyncio.Lock()
         self.session = aiohttp.ClientSession()
@@ -146,9 +148,19 @@ class Ranking(commands.Cog):
         self.bot.max_page_cache.hmset('max_pages', max_pages)
         print(f'Saved max pages {max_pages}')
 
-    async def get_page_info(self, link):
-        async with self.session.get(link) as response:
-            return await response.json(content_type=None)
+    async def get_page_info(self, link, tries=0):
+        if tries > self.total_connection_retries:
+            return None
+
+        try:
+            async with self.session.get(link) as response:
+                data = await response.json(content_type=None)
+        except ClientOSError:
+            return await self.get_page_info(link, tries + 1)
+        except ValueError:
+            return None
+        else:
+            return data
 
     async def check_pages_helper(self, resource):
         index_1 = 1
