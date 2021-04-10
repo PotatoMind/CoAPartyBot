@@ -315,6 +315,9 @@ class Ranking(commands.Cog):
                 embed.title = f'Rank info not found for {name}'
                 embed.color = discord.Color.red()
                 await msg.edit(embed=embed)
+                await self.bot.player_cache.delete(name)
+                await self.bot.db.players.delete_one({'name': name})
+
 
         print(f'Finished rank search for {name}')
 
