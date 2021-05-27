@@ -218,6 +218,9 @@ class Ranking(commands.Cog):
     async def set_player_in_cache(self, name, player_info):
         name = name.lower()
         return self.bot.player_cache.hmset(name, player_info)
+    
+    async def remove_player_in_cache(self, name):
+        return self.bot.player_cache.delete(name)
 
     async def get_player_from_db(self, name):
         name = name.lower()
@@ -315,7 +318,7 @@ class Ranking(commands.Cog):
                 embed.title = f'Rank info not found for {name}'
                 embed.color = discord.Color.red()
                 await msg.edit(embed=embed)
-                await self.bot.player_cache.delete(name)
+                await self.remove_player_in_cache(name)
                 await self.bot.db.players.delete_one({'name': name})
 
 
