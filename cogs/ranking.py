@@ -125,6 +125,18 @@ class Ranking(commands.Cog):
 
             await ctx.send(f'```diff\n{table}\n```')
 
+    async def get_player_total_rank(self, name, _type):
+        name = name.lower()
+        player_infos = self.bot.db.totals.find()
+        player_infos.sort(f'total_{_type}', pymongo.DESCENDING)
+        player_rank = 1
+        async for p in player_infos:
+            if p['name'] == name:
+                return player_rank
+            else:
+                player_rank += 1
+        return None
+
     @tasks.loop(hours=24)
     async def clear_old_cache(self):
         await self.bot.wait_until_ready()
@@ -311,7 +323,9 @@ class Ranking(commands.Cog):
                         total_levels += player_level
                         player_info[mode] = player_level
                 player_info['modify_date'] = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-                embed.set_footer(text=f'T: {end_time:.1f}s | Levels: {total_levels:,} | XP: {total_exp:,}')
+                total_xp_rank = await self.get_player_total_rank(name, 'xp')
+                total_level_rank = await self.get_player_total_rank(name, 'level')
+                embed.set_footer(text=f'T: {end_time:.1f}s | Levels: #{total_xp_rank if total_xp_rank else "NA"} - {total_levels:,} | XP: #{total_level_rank if total_level_rank else "NA"} - {total_exp:,}')
                 await msg.edit(embed=embed)
                 await self.set_player_in_cache(name, player_info)
             else:
