@@ -15,13 +15,13 @@ class Ranking(commands.Cog):
         self.bot = bot
         self.url = 'https://curseofaros.com'
         self.ranking_modes = {
-            'combat': 'highscores',
+            'melee': 'highscores',
             'mining': 'highscores-mining',
             'smithing': 'highscores-smithing',
             'woodcutting': 'highscores-woodcutting',
             'crafting': 'highscores-crafting',
             'fishing': 'highscores-fishing',
-	        'cooking': 'highscores-cooking'
+	    'cooking': 'highscores-cooking'
         }
         self.level_table = [
             0, 46, 99, 159, 229,
@@ -134,7 +134,7 @@ class Ranking(commands.Cog):
             modify_date = datetime.strptime(player_info['modify_date'.encode()].decode(), '%Y-%m-%dT%H:%M:%SZ')
             if modify_date + timedelta(days=1) < datetime.utcnow():
                 self.bot.player_cache.delete(name)
-                print(f'Deleted {player_info} from cache')
+                print(f'Deleted {name}: {player_info} from cache')
         print('Finished clearing old cache')
 
     @tasks.loop(minutes=30)
@@ -218,7 +218,7 @@ class Ranking(commands.Cog):
     async def set_player_in_cache(self, name, player_info):
         name = name.lower()
         return self.bot.player_cache.hmset(name, player_info)
-    
+
     async def remove_player_in_cache(self, name):
         return self.bot.player_cache.delete(name)
 
@@ -231,7 +231,7 @@ class Ranking(commands.Cog):
         return await self.bot.db.players.replace_one({'name': name}, player_info, upsert=True)
 
     @commands.command()
-    async def rankings(self, ctx, mode='combat', page='1'):
+    async def rankings(self, ctx, mode='melee', page='1'):
         if mode not in self.ranking_modes:
             await ctx.send(f'Could not find mode.\nAcceptable Modes: {", ".join([m for m in self.ranking_modes.keys()])}')
         else:
