@@ -325,7 +325,7 @@ class Ranking(commands.Cog):
                 player_info['modify_date'] = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
                 total_xp_rank = await self.get_player_total_rank(name, 'xp')
                 total_level_rank = await self.get_player_total_rank(name, 'level')
-                embed.set_footer(text=f'T: {end_time:.1f}s | Levels: #{total_xp_rank if total_xp_rank else "NA"} - {total_levels:,} | XP: #{total_level_rank if total_level_rank else "NA"} - {total_exp:,}')
+                embed.set_footer(text=f'T: {end_time:.1f}s | Levels: #{total_xp_rank if total_level_rank else "NA"} - {total_levels:,} | XP: #{total_level_rank if total_xp_rank else "NA"} - {total_exp:,}')
                 await msg.edit(embed=embed)
                 await self.set_player_in_cache(name, player_info)
             else:
