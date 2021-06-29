@@ -14,7 +14,7 @@ class Util(commands.Cog):
     async def on_guild_join(self, guild):
         prefix_info = {
             'guild_id': str(guild.id),
-            'prefix': '?!'
+            'prefix': '!?'
         }
         await self.bot.db.prefixes.insert_one(prefix_info)
 
