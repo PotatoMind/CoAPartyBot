@@ -403,10 +403,15 @@ class Ranking(commands.Cog):
             sub_info, color = result[1]
             async with self.lock:
                 embed = msg.embeds[0]
-                embed.title = f'Rank info for {sub_info[2]}'
-                embed.color = discord.Color(int(f'0x{color}', 16))
                 embed.add_field(name=mode, value=f'#{sub_info[0]} (LV. {self.get_level(sub_info[1])}) {sub_info[1]:,} XP', inline=False)
-                await msg.edit(embed=embed)
+                sorted_embed = discord.Embed()
+                sorted_embed.title = f'Rank info for {sub_info[2]}'
+                sorted_embed.color = discord.Color(int(f'0x{color}', 16))
+                curr_fields = {field.name: field.value for field in embed.fields}
+                for mode in self.ranking_modes.keys():
+                    if mode in curr_fields:
+                        sorted_embed.add_field(name=mode, value=curr_fields[mode], inline=False)
+                await msg.edit(embed=sorted_embed)
             print(f'Rank info found for {name}, {mode}: {result}')
             return result
         else:
