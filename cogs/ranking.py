@@ -103,7 +103,7 @@ class Ranking(commands.Cog):
             page += 1
         return True
 
-    @commands.command()
+    @commands.command(aliases=['rt'])
     async def rankings_total(self, ctx, _type='xp', skillers_only=False, start=1, size=20):
         if _type != 'xp' and _type != 'level':
             await ctx.send('Could not find type.\nAcceptable types: xp, levels')
