@@ -9,6 +9,7 @@ import asyncio
 import time
 import math
 import pymongo
+import DiscordUtils
 
 class Ranking(commands.Cog):
     def __init__(self, bot):
@@ -52,6 +53,7 @@ class Ranking(commands.Cog):
         ]
         self.page_bins = 4
         self.max_db_pages = 2000
+        self.items_per_page = 10
         self.total_connection_retries = 5
         self.lock = asyncio.Lock()
         self.total_lock = asyncio.Lock()
@@ -241,6 +243,70 @@ class Ranking(commands.Cog):
     async def set_player_in_db(self, name, player_info):
         name = name.lower()
         return await self.bot.db.players.replace_one({'name': name}, player_info, upsert=True)
+
+    @commands.command(aliases=['pol'])
+    async def players_over_level(self, ctx, level=80, mode=None):
+        if mode and mode not in self.ranking_modes:
+            return await ctx.send(f'Could not find mode.\nAcceptable Modes: {", ".join([m for m in self.ranking_modes.keys()])}')
+
+        if level < 80 or level > 120:
+            return await ctx.send('Bad level. Pick a level between 80 and 120.')
+
+        if mode:
+            search_resources = [self.ranking_modes[mode]]
+        else:
+            search_resources = list(self.ranking_modes.values())
+
+        embed_title = f'Players above Level {level} in {mode.capitalize() if mode else "ALL"}'
+        embed = discord.Embed(title=f'Searching for {embed_title}')
+        msg = await ctx.send(embed=embed)
+
+        player_counts = {}
+        for resource in search_resources:
+            data = await self.get_page_info(f'{self.url}/{resource}.json?p=0')
+            page = 1
+            while data and self.get_level(data[0]['xp']) >= level:
+                for player in data:
+                    player_level = self.get_level(player['xp'])
+                    if player_level >= level:
+                        if player['name'] not in player_counts:
+                            player_counts[player['name']] = (1, player_level)
+                        else:
+                            count, total_level = player_counts[player['name']]
+                            player_counts[player['name']] = (count + 1, total_level + player_level)
+                data = await self.get_page_info(f'{self.url}/{resource}.json?p={page}')
+                page += 1
+        
+        filtered_player_levels = {k: v[1] for k, v in player_counts.items() if v[0] == len(search_resources)}
+        filtered_player_names = [k for k, v in sorted(filtered_player_levels.items(), key=lambda k:k[1], reverse=True)]
+    
+        if len(filtered_player_names) > self.items_per_page:
+            splits = math.ceil(len(filtered_player_names) / self.items_per_page)
+
+            embeds = []
+            i = 0
+            for j in range(splits):
+                i += self.items_per_page
+                if i > len(filtered_player_names):
+                    i = len(filtered_player_names)
+                
+                embed = discord.Embed(title=f'Found {len(filtered_player_names)} {embed_title}', color=discord.Color.purple())
+                for player_name in filtered_player_names[j * self.items_per_page:i]:
+                    embed.add_field(name=player_name, value=filtered_player_levels[player_name], inline=True)
+                embeds.append(embed)
+            await msg.delete()
+            paginator = DiscordUtils.Pagination.AutoEmbedPaginator(ctx, auto_footer=True)
+            return await paginator.run(embeds)
+        else:
+            embed = discord.Embed(title=f'Found {len(filtered_player_names)} {embed_title}', color=discord.Color.purple())
+            for player_name in filtered_player_names:
+                embed.add_field(name=player_name, value=filtered_player_levels[player_name], inline=False)
+            await msg.delete()
+            return await ctx.send(embed=embed)
+
+    @commands.command()
+    async def guild_tag_search(self, ctx, tag):
+        return await ctx.send(f'Fuck this guild: {tag.upper()}')
 
     @commands.command()
     async def rankings(self, ctx, mode='melee', page='1'):
