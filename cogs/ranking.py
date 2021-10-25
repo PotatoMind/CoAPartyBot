@@ -22,7 +22,7 @@ class Ranking(commands.Cog):
             'woodcutting': 'highscores-woodcutting',
             'crafting': 'highscores-crafting',
             'fishing': 'highscores-fishing',
-	    'cooking': 'highscores-cooking'
+	        'cooking': 'highscores-cooking'
         }
         self.level_table = [
             0, 46, 99, 159, 229,
@@ -54,9 +54,10 @@ class Ranking(commands.Cog):
         self.page_bins = 4
         self.max_db_pages = 2000
         self.items_per_page = 10
+        self.min_players_per_guild = 10
         self.total_connection_retries = 5
         self.lock = asyncio.Lock()
-        self.total_lock = asyncio.Lock()
+        self.player_lock = asyncio.Lock()
         self.session = aiohttp.ClientSession()
         self.check_pages.start()
         self.clear_old_cache.start()
@@ -66,6 +67,7 @@ class Ranking(commands.Cog):
     async def leaderboards_to_db(self):
         await self.bot.wait_until_ready()
         await self.bot.db.totals.drop()
+        await self.bot.db.guilds.drop()
         tasks = [self.leaderboards_to_db_task(mode, resource) for mode, resource in self.ranking_modes.items()]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         print(results)
@@ -81,9 +83,13 @@ class Ranking(commands.Cog):
             json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={page}')
             for player in json_data:
                 player_name_lower = player['name'].lower()
+                player_name_lower_split = player_name_lower.split()
+                player_guild_tag = None
+                if len(player_name_lower_split) > 1:
+                    player_guild_tag = player_name_lower_split[0]
                 player_level = self.get_level(player['xp'])
 
-                async with self.total_lock:
+                async with self.player_lock:
                     player_info = await self.bot.db.totals.find_one({'name': player_name_lower}, {'_id': False})
                     if not player_info:
                         player_info = {
@@ -100,6 +106,27 @@ class Ranking(commands.Cog):
                     player_info['total_level'] += player_level
                     player_info[mode_level_key] = player_level
                     player_info[mode_xp_key] = player['xp']
+
+                    if player_guild_tag:
+                        player_guild_info = await self.bot.db.guilds.find_one({'name': player_guild_tag}, {'_id': False})
+                        if not player_guild_info:
+                            player_guild_info = {
+                                'name': player_guild_tag,
+                                'num_players': 0,
+                                'total_xp': 0,
+                                'total_level': 0,
+                                'average_xp': 0,
+                                'average_level': 0,
+                                'players': []
+                            }
+                        player_guild_info['total_xp'] += player['xp']
+                        player_guild_info['total_level'] += player_level
+                        player_guild_info['players'].append(player_name_lower)
+                        player_guild_info['players'] = list(set(player_guild_info['players']))
+                        player_guild_info['num_players'] = len(player_guild_info['players'])
+                        player_guild_info['average_xp'] = player_guild_info['total_xp'] // player_guild_info['num_players']
+                        player_guild_info['average_level'] = player_guild_info['total_level'] // player_guild_info['num_players']
+                        await self.bot.db.guilds.replace_one({'name': player_guild_tag}, player_guild_info, upsert=True)
 
                     await self.bot.db.totals.replace_one({'name': player_name_lower}, player_info, upsert=True)
             page += 1
@@ -304,9 +331,96 @@ class Ranking(commands.Cog):
             await msg.delete()
             return await ctx.send(embed=embed)
 
-    @commands.command()
+    @commands.command(aliases=['gts'])
     async def guild_tag_search(self, ctx, tag):
-        return await ctx.send(f'Fuck this guild: {tag.upper()}')
+        tag = tag.lower()
+        guild_info = await self.bot.db.guilds.find_one({'name': tag}, {'_id': False})
+
+        embed = discord.Embed(title=f'Searching for {tag.upper()}')
+        msg = await ctx.send(embed=embed)
+        
+        if guild_info:
+            guild_players = sorted(guild_info['players'])
+            num_players = guild_info['num_players']
+            total_xp = guild_info['total_xp']
+            total_levels = guild_info['total_level']
+            avg_xp_per_player = guild_info['average_xp']
+            avg_levels_per_player = guild_info['average_level']
+            if num_players > self.items_per_page:
+                splits = math.ceil(num_players / self.items_per_page)
+
+                embeds = []
+                i = 0
+                for j in range(splits):
+                    i += self.items_per_page
+                    if i > num_players:
+                        i = num_players
+                    
+                    embed = discord.Embed(
+                        title=f'Guild {tag.upper()} - {num_players} Players Found',
+                        color=discord.Color.purple(),
+                        description=f'''
+                        Total XP: {total_xp:,}
+                        Total Levels: {total_levels:,}
+                        Avg XP Per Member: {avg_xp_per_player:,}
+                        Avg Levels Per Member: {avg_levels_per_player:,}
+                        '''
+                    )
+                    starting_player_idx = j * self.items_per_page
+                    for k, player_name in enumerate(guild_players[starting_player_idx:i]):
+                        embed.add_field(name=f'Player {starting_player_idx + k + 1}', value=player_name, inline=True)
+                    embeds.append(embed)
+                await msg.delete()
+                paginator = DiscordUtils.Pagination.AutoEmbedPaginator(ctx, auto_footer=True)
+                return await paginator.run(embeds)
+            else:
+                embed = discord.Embed(
+                    title=f'Guild {tag.upper()} - {num_players} Players Found',
+                    color=discord.Color.purple(),
+                    description=f'''
+                    Total XP: {total_xp:,}
+                    Total Levels: {total_levels:,}
+                    Avg XP Per Member: {avg_xp_per_player:,}
+                    Avg Levels Per Member: {avg_levels_per_player:,}
+                    '''
+                )
+                for i, player_name in enumerate(guild_players):
+                    embed.add_field(name=f'Player {i}', value=player_name, inline=True)
+                await msg.delete()
+                return await ctx.send(embed=embed)
+
+        await msg.delete()
+        return await ctx.send(f'Guild {tag} not found within {self.max_db_pages} leaderboard pages')
+
+    @commands.command(aliases=['gr'])
+    async def guild_rankings(self, ctx, calc='total', _type='xp', start=1, size=10):
+        if _type != 'xp' and _type != 'level':
+            await ctx.send('Could not find type.\nAcceptable types: xp, levels')
+        elif start < 1 or size > 50:
+            await ctx.send('Bad index range. Make sure start is > 0 and size is < 50')
+        elif calc != 'average' and calc != 'total':
+            await ctx.send('Bad calc type.\nAcceptable types: average, total')
+        else:
+            guild_infos = self.bot.db.guilds.find({'num_players': {'$gte': self.min_players_per_guild}})
+            guild_infos.sort(f'{calc}_{_type}', pymongo.DESCENDING).skip(start-1).limit(size)
+
+            table = PrettyTable()
+            table.field_names = ['Rank', 'Tag', 'Num Players', 'Total XP', 'Total Level', 'Avg XP Per Player', 'Avg Levels Per player']
+
+            i = 0
+            async for guild_info in guild_infos:
+                table.add_row([
+                    i+start,
+                    guild_info['name'],
+                    guild_info['num_players'],
+                    f'{guild_info["total_xp"]:,}',
+                    f'{guild_info["total_level"]:,}',
+                    f'{guild_info["average_xp"]:,}',
+                    f'{guild_info["average_level"]:,}'
+                ])
+                i += 1
+
+            await ctx.send(f'```diff\n{table}\n```')
 
     @commands.command()
     async def rankings(self, ctx, mode='melee', page='1'):
