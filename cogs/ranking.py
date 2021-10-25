@@ -134,7 +134,7 @@ class Ranking(commands.Cog):
     @commands.command(aliases=['rt'])
     async def rankings_total(self, ctx, _type='xp', skillers_only=False, start=1, size=20):
         if _type != 'xp' and _type != 'level':
-            await ctx.send('Could not find type.\nAcceptable types: xp, levels')
+            await ctx.send('Could not find type.\nAcceptable types: xp, level')
         elif start < 1 or size > 50:
             await ctx.send('Bad index range. Make sure start is > 0 and size is < 50')
         else:
@@ -331,7 +331,9 @@ class Ranking(commands.Cog):
             return await ctx.send(embed=embed)
 
     @commands.command(aliases=['gts'])
-    async def guild_tag_search(self, ctx, tag):
+    async def guild_tag_search(self, ctx, tag, player_sort='xp'):
+        if player_sort != 'xp' and player_sort != 'level':
+            await ctx.send('Could not find sorting type.\nAcceptable types: xp, level')
         tag = tag.lower()
         guild_info = await self.bot.db.guilds.find_one({'name': tag}, {'_id': False})
 
@@ -339,7 +341,15 @@ class Ranking(commands.Cog):
         msg = await ctx.send(embed=embed)
         
         if guild_info:
-            guild_players = sorted(guild_info['players'])
+            guild_players = guild_info['players']
+            guild_player_infos = {}
+            for player_name in guild_players:
+                player_info = await self.bot.db.totals.find_one({'name': player_name}, {'_id': False})
+                if player_info:
+                    guild_player_infos[player_name] = {'xp': player_info['total_xp'],'level': player_info['total_level']}
+                else:
+                    guild_player_infos[player_name] = {'xp': 0, 'level': 0}
+            guild_player_infos = [(k, v) for k, v in sorted(guild_player_infos.items(), key=lambda k:k[1][player_sort], reverse=True)]
             num_players = guild_info['num_players']
             total_xp = guild_info['total_xp']
             total_levels = guild_info['total_level']
@@ -365,9 +375,9 @@ class Ranking(commands.Cog):
                         Avg Levels Per Member: {avg_levels_per_player:,}
                         '''
                     )
-                    starting_player_idx = j * self.items_per_page
-                    for k, player_name in enumerate(guild_players[starting_player_idx:i]):
-                        embed.add_field(name=f'Player {starting_player_idx + k + 1}', value=player_name, inline=True)
+                    for player_name, player_values in guild_player_infos[j * self.items_per_page:i]:
+                        player_value = f"XP: {player_values['xp']:,}\nLevels: {player_values['level']:,}"
+                        embed.add_field(name=player_name, value=player_value, inline=True)
                     embeds.append(embed)
                 await msg.delete()
                 paginator = DiscordUtils.Pagination.AutoEmbedPaginator(ctx, auto_footer=True)
@@ -383,8 +393,9 @@ class Ranking(commands.Cog):
                     Avg Levels Per Member: {avg_levels_per_player:,}
                     '''
                 )
-                for i, player_name in enumerate(guild_players):
-                    embed.add_field(name=f'Player {i}', value=player_name, inline=True)
+                for player_name, player_values in guild_player_infos:
+                    player_value = f"XP: {player_values['xp']:,}\nLevels: {player_values['level']:,}"
+                    embed.add_field(name=player_name, value=player_value, inline=True)
                 await msg.delete()
                 return await ctx.send(embed=embed)
 
