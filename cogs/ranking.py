@@ -54,7 +54,6 @@ class Ranking(commands.Cog):
         self.page_bins = 4
         self.max_db_pages = 2000
         self.items_per_page = 10
-        self.min_players_per_guild = 10
         self.total_connection_retries = 5
         self.lock = asyncio.Lock()
         self.player_lock = asyncio.Lock()
@@ -393,15 +392,18 @@ class Ranking(commands.Cog):
         return await ctx.send(f'Guild {tag} not found within {self.max_db_pages} leaderboard pages')
 
     @commands.command(aliases=['gr'])
-    async def guild_rankings(self, ctx, calc='total', _type='xp', start=1, size=10):
+    async def guild_rankings(self, ctx, calc='total', _type='xp', min_members=10, start=1, size=10):
         if _type != 'xp' and _type != 'level':
-            await ctx.send('Could not find type.\nAcceptable types: xp, levels')
+            return await ctx.send('Could not find type.\nAcceptable types: xp, levels')
         elif start < 1 or size > 50:
-            await ctx.send('Bad index range. Make sure start is > 0 and size is < 50')
+            return await ctx.send('Bad index range. Make sure start is > 0 and size is < 50')
         elif calc != 'average' and calc != 'total':
-            await ctx.send('Bad calc type.\nAcceptable types: average, total')
+            return await ctx.send('Bad calc type.\nAcceptable types: average, total')
         else:
-            guild_infos = self.bot.db.guilds.find({'num_players': {'$gte': self.min_players_per_guild}})
+            guild_infos = self.bot.db.guilds.find({'num_players': {'$gte': min_members}})
+            if not guild_infos:
+                return await ctx.send('No guilds match this criteria')
+
             guild_infos.sort(f'{calc}_{_type}', pymongo.DESCENDING).skip(start-1).limit(size)
 
             table = PrettyTable()
@@ -420,7 +422,7 @@ class Ranking(commands.Cog):
                 ])
                 i += 1
 
-            await ctx.send(f'```diff\n{table}\n```')
+            return await ctx.send(f'```diff\n{table}\n```')
 
     @commands.command()
     async def rankings(self, ctx, mode='melee', page='1'):
