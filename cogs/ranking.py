@@ -4,7 +4,6 @@ from discord.ext import commands, tasks
 import aiohttp
 from aiohttp import ClientOSError
 import sys
-from prettytable import PrettyTable
 import asyncio
 import time
 import math
@@ -138,20 +137,22 @@ class Ranking(commands.Cog):
         elif start < 1 or size > 50:
             await ctx.send('Bad index range. Make sure start is > 0 and size is < 50')
         else:
-            filter = {'combat_level': 1} if skillers_only else None
-            player_infos = self.bot.db.totals.find(filter)
+            find_filter = {'combat_level': 1} if skillers_only else None
+            player_infos = self.bot.db.totals.find(find_filter)
             player_infos.sort(f'total_{_type}', pymongo.DESCENDING).skip(start-1).limit(size)
 
-            table = PrettyTable()
-            table.field_names = ['Rank', 'Name', _type.upper()]
-
+            embed = discord.Embed(title=f'Total Player Rankings - Sorted by {_type.title()}')
             i = 0
-            async for p in player_infos:
-                total = p[f'total_{_type}']
-                table.add_row([i+start, p['name'], f'{total:,}'])
+            async for player_info in player_infos:
+                value = f'''
+Name: {player_info["name"]}
+Total XP: {player_info["total_xp"]:,}
+Total Level: {player_info["total_level"]:,}
+                '''
+                embed.add_field(name=f'Rank {i + start}', value=value)
                 i += 1
 
-            await ctx.send(f'```diff\n{table}\n```')
+            return await ctx.send(embed=embed)
 
     async def get_player_total_rank(self, name, _type):
         name = name.lower()
@@ -369,10 +370,10 @@ class Ranking(commands.Cog):
                         title=f'Guild {tag.upper()} - {num_players} Players Found',
                         color=discord.Color.purple(),
                         description=f'''
-                        Total XP: {total_xp:,}
-                        Total Levels: {total_levels:,}
-                        Avg XP Per Member: {avg_xp_per_player:,}
-                        Avg Levels Per Member: {avg_levels_per_player:,}
+Total XP: {total_xp:,}
+Total Levels: {total_levels:,}
+Avg XP Per Member: {avg_xp_per_player:,}
+Avg Levels Per Member: {avg_levels_per_player:,}
                         '''
                     )
                     for player_name, player_values in guild_player_infos[j * self.items_per_page:i]:
@@ -387,10 +388,10 @@ class Ranking(commands.Cog):
                     title=f'Guild {tag.upper()} - {num_players} Players Found',
                     color=discord.Color.purple(),
                     description=f'''
-                    Total XP: {total_xp:,}
-                    Total Levels: {total_levels:,}
-                    Avg XP Per Member: {avg_xp_per_player:,}
-                    Avg Levels Per Member: {avg_levels_per_player:,}
+Total XP: {total_xp:,}
+Total Levels: {total_levels:,}
+Avg XP Per Member: {avg_xp_per_player:,}
+Avg Levels Per Member: {avg_levels_per_player:,}
                     '''
                 )
                 for player_name, player_values in guild_player_infos:
@@ -417,23 +418,21 @@ class Ranking(commands.Cog):
 
             guild_infos.sort(f'{calc}_{_type}', pymongo.DESCENDING).skip(start-1).limit(size)
 
-            table = PrettyTable()
-            table.field_names = ['Rank', 'Tag', 'Num Players', 'Total XP', 'Total Level', 'Avg XP Per Player', 'Avg Levels Per player']
-
+            embed = discord.Embed(title=f'Guild Rankings - Sorted by {calc.title()} {_type.title()}')
             i = 0
             async for guild_info in guild_infos:
-                table.add_row([
-                    i+start,
-                    guild_info['name'],
-                    guild_info['num_players'],
-                    f'{guild_info["total_xp"]:,}',
-                    f'{guild_info["total_level"]:,}',
-                    f'{guild_info["average_xp"]:,}',
-                    f'{guild_info["average_level"]:,}'
-                ])
+                value = f'''
+Tag: {guild_info["name"]}
+Num Players: {guild_info["num_players"]}
+Total XP: {guild_info["total_xp"]:,}
+Total Level: {guild_info["total_level"]:,}
+Average XP Per Player: {guild_info["average_xp"]:,}
+Average Levels Per Player: {guild_info["average_level"]:,}
+                '''
+                embed.add_field(name=f'Rank {i + start}', value=value)
                 i += 1
 
-            return await ctx.send(f'```diff\n{table}\n```')
+            return await ctx.send(embed=embed)
 
     @commands.command()
     async def rankings(self, ctx, mode='melee', page='1'):
@@ -445,17 +444,24 @@ class Ranking(commands.Cog):
             if not json_data:
                 return await ctx.send(f'Ran out of pages!')
 
-            table = PrettyTable()
-            table.field_names = ['Rank', 'Name', 'Level', 'XP']
+            embed = discord.Embed(title=f'Player Rankings - {mode}')
             for i, p in enumerate(json_data):
-                table.add_row([20*(int(page)-1)+i+1, p['name'], self.get_level(p['xp']), f"{p['xp']:,}"])
+                value = f'''
+Name: {p["name"]}
+Level: {self.get_level(p["xp"])}
+XP: {p["xp"]:,}
+                '''
+                embed.add_field(name=f'Rank {20*(int(page)-1)+i+1}', value=value)
 
             max_page = await self.get_max_page(mode)
             if max_page:
                 max_page = str(max_page)
             else:
                 max_page = 'NA'
-            await ctx.send(f'```diff\n{table}\n*** Page {page} / {max_page} ***\n```')
+
+            embed.set_footer(text=f'Page {page} / {max_page}')
+
+            return await ctx.send(embed=embed)
 
     @commands.command(aliases=['rsearch', 'rs', 'rankingss'])
     async def rankings_search(self, ctx, *, name=None):
