@@ -332,7 +332,7 @@ Total Level: {player_info["total_level"]:,}
             return await ctx.send(embed=embed)
 
     @commands.command(aliases=['gts'])
-    async def guild_tag_search(self, ctx, tag, player_sort='xp'):
+    async def guild_tag_search(self, ctx, tag, player_sort='level'):
         if player_sort != 'xp' and player_sort != 'level':
             await ctx.send('Could not find sorting type.\nAcceptable types: xp, level')
         tag = tag.lower()
@@ -340,7 +340,7 @@ Total Level: {player_info["total_level"]:,}
 
         embed = discord.Embed(title=f'Searching for {tag.upper()}')
         msg = await ctx.send(embed=embed)
-        
+
         if guild_info:
             guild_players = guild_info['players']
             guild_player_infos = {}
