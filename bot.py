@@ -32,6 +32,7 @@ with open('settings.json', 'r') as f:
 
 token = settings['token']
 bot.owner_id = settings['owner_id']
+bot.leaderboards_api_url = settings['leaderboards_api_url']
 motor_client = AsyncIOMotorClient(settings['mongo_uri'])
 bot.db = motor_client['coa']
 player_cache = Redis.from_url(settings['redis_url'], db=0)
