@@ -16,13 +16,15 @@ class Ranking(commands.Cog):
         self.bot = bot
         self.url = 'https://curseofaros.com'
         self.ranking_modes = {
-            'melee': 'highscores',
+            'melee': 'highscores-melee',
+            'magic': 'highscores-magic',
             'mining': 'highscores-mining',
             'smithing': 'highscores-smithing',
             'woodcutting': 'highscores-woodcutting',
             'crafting': 'highscores-crafting',
             'fishing': 'highscores-fishing',
-            'cooking': 'highscores-cooking'
+            'cooking': 'highscores-cooking',
+            'tailoring': 'highscores-tailoring'
         }
         self.ranking_modes_2 = {
             'melee': 100,
@@ -84,60 +86,66 @@ class Ranking(commands.Cog):
         print(results)
 
     async def leaderboards_to_db_task(self, mode, resource):
+        mode_level_key = f'{mode}_level'
+        mode_xp_key = f'{mode}_xp'
         max_page = await self.get_max_page(mode)
         page = 0
         while page < max_page and page < self.max_db_pages:
-            print(f'Saving leaderboards to db, {mode}: {page}')
+            if page % 1000 == 0:
+                print(f'Saving leaderboards to db, {mode}: {page}')
             json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={page}')
             for player in json_data:
                 player_name_lower = player['name'].lower()
+                if player_name_lower == 'bot':
+                    print(mode, player)
                 player_name_lower_split = player_name_lower.split()
                 player_guild_tag = None
                 if len(player_name_lower_split) > 1:
                     player_guild_tag = player_name_lower_split[0]
+                player_level = self.get_level(player['xp'])
 
                 async with self.player_lock:
-                    found_player = await self.bot.db.totals.find_one({'name': player_name_lower}, {'_id': False})
-                    if not found_player:
-                        player_info = await self.get_page_info(f'{self.bot.leaderboards_api_url}/players/name/{player_name_lower}')
-                        if player_info:
-                            player_info['name'] = player_name_lower
-                            total_xp = 0
-                            total_level = 0
-                            for mode_2 in self.ranking_modes_2.keys():
-                                xp = player_info[f'{mode_2}_xp']
-                                level = self.get_level(xp)
-                                total_xp += xp
-                                total_level += level
+                    player_info = await self.bot.db.totals.find_one({'name': player_name_lower}, {'_id': False})
+                    if not player_info:
+                        player_info = {
+                            'name': player_name_lower,
+                            'total_xp': 0,
+                            'total_level': 0
+                        }
 
-                            player_info['total_xp'] = total_xp
-                            player_info['total_level'] = total_level
+                    if mode_level_key in player_info:
+                        player_info['total_xp'] -= player_info[mode_xp_key]
+                        player_info['total_level'] -= player_info[mode_level_key]
 
-                            if player_guild_tag:
-                                player_guild_info = await self.bot.db.guilds.find_one({'name': player_guild_tag}, {'_id': False})
-                                if not player_guild_info:
-                                    player_guild_info = {
-                                        'name': player_guild_tag,
-                                        'num_players': 0,
-                                        'total_xp': 0,
-                                        'total_level': 0,
-                                        'average_xp': 0,
-                                        'average_level': 0,
-                                        'players': []
-                                    }
-                                player_guild_info['total_xp'] += total_xp
-                                player_guild_info['total_level'] += total_level
-                                player_guild_info['players'].append(
-                                    player_name_lower)
-                                player_guild_info['players'] = list(
-                                    set(player_guild_info['players']))
-                                player_guild_info['num_players'] = len(
-                                    player_guild_info['players'])
-                                player_guild_info['average_xp'] = player_guild_info['total_xp'] // player_guild_info['num_players']
-                                player_guild_info['average_level'] = player_guild_info['total_level'] // player_guild_info['num_players']
-                                await self.bot.db.guilds.replace_one({'name': player_guild_tag}, player_guild_info, upsert=True)
+                    player_info['total_xp'] += player['xp']
+                    player_info['total_level'] += player_level
+                    player_info[mode_level_key] = player_level
+                    player_info[mode_xp_key] = player['xp']
 
-                            await self.bot.db.totals.replace_one({'name': player_name_lower}, player_info, upsert=True)
+                    if player_guild_tag:
+                        player_guild_info = await self.bot.db.guilds.find_one({'name': player_guild_tag}, {'_id': False})
+                        if not player_guild_info:
+                            player_guild_info = {
+                                'name': player_guild_tag,
+                                'num_players': 0,
+                                'total_xp': 0,
+                                'total_level': 0,
+                                'average_xp': 0,
+                                'average_level': 0,
+                                'players': []
+                            }
+                        player_guild_info['total_xp'] += player['xp']
+                        player_guild_info['total_level'] += player_level
+                        player_guild_info['players'].append(player_name_lower)
+                        player_guild_info['players'] = list(
+                            set(player_guild_info['players']))
+                        player_guild_info['num_players'] = len(
+                            player_guild_info['players'])
+                        player_guild_info['average_xp'] = player_guild_info['total_xp'] // player_guild_info['num_players']
+                        player_guild_info['average_level'] = player_guild_info['total_level'] // player_guild_info['num_players']
+                        await self.bot.db.guilds.replace_one({'name': player_guild_tag}, player_guild_info, upsert=True)
+
+                    await self.bot.db.totals.replace_one({'name': player_name_lower}, player_info, upsert=True)
             page += 1
         return True
 
