@@ -71,6 +71,7 @@ class Ranking(commands.Cog):
         self.lock = asyncio.Lock()
         self.player_lock = asyncio.Lock()
         self.session = aiohttp.ClientSession()
+        self.blacklist_file = 'blacklist.txt'
         self.check_pages.start()
         self.clear_old_cache.start()
         self.leaderboards_to_db.start()
@@ -96,8 +97,6 @@ class Ranking(commands.Cog):
             json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={page}')
             for player in json_data:
                 player_name_lower = player['name'].lower()
-                if player_name_lower == 'bot':
-                    print(mode, player)
                 player_name_lower_split = player_name_lower.split()
                 player_guild_tag = None
                 if len(player_name_lower_split) > 1:
@@ -105,7 +104,7 @@ class Ranking(commands.Cog):
                 player_level = self.get_level(player['xp'])
 
                 async with self.player_lock:
-                    player_info = await self.bot.db.totals.find_one({'name': player_name_lower}, {'_id': False})
+                    player_info = await self.bot.db.totals.find_one({'name': player_name_lower})
                     if not player_info:
                         player_info = {
                             'name': player_name_lower,
@@ -123,7 +122,7 @@ class Ranking(commands.Cog):
                     player_info[mode_xp_key] = player['xp']
 
                     if player_guild_tag:
-                        player_guild_info = await self.bot.db.guilds.find_one({'name': player_guild_tag}, {'_id': False})
+                        player_guild_info = await self.bot.db.guilds.find_one({'name': player_guild_tag})
                         if not player_guild_info:
                             player_guild_info = {
                                 'name': player_guild_tag,
@@ -150,14 +149,13 @@ class Ranking(commands.Cog):
         return True
 
     @commands.command(aliases=['rt'])
-    async def rankings_total(self, ctx, _type='xp', skillers_only=False, start=1, size=20):
+    async def rankings_total(self, ctx, _type='xp', start=1, size=20):
         if _type != 'xp' and _type != 'level':
             await ctx.send('Could not find type.\nAcceptable types: xp, level')
         elif start < 1 or size > 50:
             await ctx.send('Bad index range. Make sure start is > 0 and size is < 50')
         else:
-            find_filter = {'combat_level': 1} if skillers_only else None
-            player_infos = self.bot.db.totals.find(find_filter)
+            player_infos = self.bot.db.totals.find()
             player_infos.sort(f'total_{_type}', pymongo.DESCENDING).skip(
                 start-1).limit(size)
 
@@ -522,20 +520,28 @@ XP: {p["xp"]:,}
         elif len(name) < 3 or len(name) > 14:
             return await ctx.send('Invalid name!')
 
-        player_info = await self.get_page_info(f'{self.bot.leaderboards_api_url}/players/name/{name}')
-        if not player_info:
-            embed = discord.Embed(
-                title=f'Info for {name} not found',
-                color=discord.Color.red()
-            )
-            return await ctx.send(embed=embed)
-
         print(f'Starting rank search for {name}')
         embed = discord.Embed(
-            title=f'Rank info for {player_info["name"]}',
-            color=discord.Color.purple()
+            title=f'Searching leaderboards for {name}...',
+            color=discord.Color.green()
         )
+        msg = await ctx.send(embed=embed)
 
+        if await self.is_blacklisted(name):
+            embed.title = f'Info for {name} not found'
+            embed.color = discord.Color.red()
+            print(f'{name} is blacklisted')
+            return await msg.edit(embed=embed)
+
+        player_info = await self.get_page_info(f'{self.bot.leaderboards_api_url}/players/name/{name}')
+        if not player_info:
+            embed.title = f'Info for {name} not found'
+            embed.color = discord.Color.red()
+            print(f'{name} not found')
+            return await msg.edit(embed=embed)
+
+        embed.title = f'Rank info for {player_info["name"]}'
+        embed.color = discord.Color.purple()
         name = name.lower()
         total_xp = 0
         total_levels = 0
@@ -558,7 +564,7 @@ XP: {p["xp"]:,}
             embed.set_footer(text=footer_text)
 
         print(f'Finished rank search for {name}')
-        return await ctx.send(embed=embed)
+        return await msg.edit(embed=embed)
 
     @commands.command(aliases=['rl'])
     async def rankings_link(self, ctx, *, name):
@@ -585,6 +591,18 @@ XP: {p["xp"]:,}
         while xp >= self.level_table[level]:
             level += 1
         return level
+
+    async def is_blacklisted(self, name):
+        try:
+            with open(self.blacklist_file) as f:
+                blacklisted_players = f.readlines()
+
+            if blacklisted_players:
+                return name.lower() in blacklisted_players
+        except FileNotFoundError as e:
+            print(e)
+
+        return False
 
 
 def setup(bot):
