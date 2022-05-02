@@ -595,7 +595,7 @@ XP: {p["xp"]:,}
     async def is_blacklisted(self, name):
         try:
             with open(self.blacklist_file) as f:
-                blacklisted_players = f.readlines()
+                blacklisted_players = f.read().splitlines()
 
             if blacklisted_players:
                 return name.lower() in blacklisted_players
