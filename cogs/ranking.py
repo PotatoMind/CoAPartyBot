@@ -77,8 +77,9 @@ class Ranking(commands.Cog):
         self.check_pages.start()
         self.clear_old_cache.start()
         self.leaderboards_to_db.start()
+        self.tracked_players_to_db.start()
 
-    @tasks.loop(hours=24)
+    @tasks.loop(minutes=2)
     async def tracked_players_to_db(self):
         await self.bot.wait_until_ready()
         tracked_players = await self.get_list_of_tracked_players()
@@ -107,41 +108,43 @@ class Ranking(commands.Cog):
         tracked_player['name'] = player_name
         tracked_player['name_lowered'] = player_name.lower()
         tracked_player['records'].insert(0, new_record)
-        await self.bot.db.tracked_players.replace_one({'id': tracked_player_id}, tracked_player)
+        await self.bot.db.tracked_players.replace_one({'id': tracked_player_id}, tracked_player, upsert=True)
 
     async def get_list_of_tracked_players(self):
         tracked_players = []
         curr_time = datetime.utcnow()
 
         # assumes records are sorted by date descending
-        for tracked_player in self.bot.db.tracked_players.find({'track': True}):
+        async for tracked_player in self.bot.db.tracked_players.find({'track': True}):
             player_id = tracked_player['id']
             last_checked = tracked_player['last_checked']
-            if last_checked + timedelta(days=self.tracking_days_after_removal_check) > curr_time:
+            if last_checked + timedelta(days=self.tracking_days_after_removal_check) < curr_time:
                 records = tracked_player['records']
                 i = 0
-                while i < len(records) - 1 and records[i]['date'] > last_checked:
+                while i < len(records) - 1 and records[i]['created'] > last_checked:
                     i += 1
 
                 total_prev_xp = 0
                 found_record = records[i]
                 for mode in self.ranking_modes_2.keys():
                     total_prev_xp += found_record[f'{mode}_xp']
-                
-                xp_change_ratio = abs((tracked_player['total_xp'] - total_prev_xp) / total_prev_xp)
+
+                xp_change_ratio = abs(
+                    (tracked_player['total_xp'] - total_prev_xp) / total_prev_xp)
                 if xp_change_ratio < self.tracking_change_threshold:
                     tracked_player['track'] = False
 
-            if tracked_player['track']
+            if tracked_player['track']:
                 tracked_players.append(tracked_player)
 
             tracked_player['last_checked'] = curr_time
             await self.bot.db.tracked_players.replace_one({'id': player_id}, tracked_player)
-        
+
         return tracked_players
 
     async def remove_player_from_tracked(self, player_id):
-        tracked_player = self.bot.db.tracked_players.find_one({'id': player_id})
+        tracked_player = self.bot.db.tracked_players.find_one(
+            {'id': player_id})
         if tracked_player:
             tracked_player['track'] = False
             await self.bot.db.tracked_players.replace_one({'id': player_id}, tracked_player)
@@ -150,15 +153,16 @@ class Ranking(commands.Cog):
     async def track_player(self, ctx, *, name=None):
         if name is None:
             return await ctx.send('Must give name to track')
-        
-        if self.is_blacklisted(name):
+
+        if await self.is_blacklisted(name):
             return await ctx.send('Player not found')
 
         player_info = await self.get_page_info(f'{self.bot.leaderboards_api_url}/players/name/{name}')
         if not player_info:
             return await ctx.send('Player not found')
-        
-        tracked_player = self.bot.db.tracked_players.find_one({'id': player_info['id']})
+
+        tracked_player = await self.bot.db.tracked_players.find_one(
+            {'id': player_info['id']})
         if tracked_player:
             if tracked_player['track']:
                 return await ctx.send('Player already being tracked')
@@ -176,18 +180,22 @@ class Ranking(commands.Cog):
                 'records': []
             }
             await self.tracked_player_to_db(tracked_player, player_info)
-        return ctx.send(f'Started tracking for player: {name}!')
-    
+        return await ctx.send(f'Started tracking for player: {name}!')
+
     @commands.command(aliases=['tpi'])
     async def tracked_player_info(self, ctx, *, name=None):
         if name is None:
             return await ctx.send('Must give name to get info for')
-        
-        player_info = await self.get_page_info(f'{self.bot.leaderboards_api_url}/players/id/{name}')
+
+        player_info = await self.get_page_info(f'{self.bot.leaderboards_api_url}/players/name/{name}')
         if not player_info:
             return await ctx.send('Player not found')
 
-        tracked_player = self.bot.db.tracked_players.find_one({'id': player_info['id']})
+        tracked_player = await self.bot.db.tracked_players.find_one(
+            {'id': player_info['id']})
+        if not tracked_player:
+            return await ctx.send('Player not found')
+
         embed = discord.Embed(
             title=f'Recent 5 entries for {name}',
             color=discord.Color.purple(),
@@ -206,6 +214,8 @@ class Ranking(commands.Cog):
                 value='\n'.join(xp_values)
             )
             i += 1
+
+        return await ctx.send(embed=embed)
 
     @tasks.loop(hours=24)
     async def leaderboards_to_db(self):
