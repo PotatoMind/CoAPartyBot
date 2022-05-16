@@ -8,3 +8,4 @@ requests==2.25.1
 bs4==0.0.1
 motor==2.3.0
 redis==3.5.3
+matplotlib==3.5.2

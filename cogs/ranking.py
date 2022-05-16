@@ -4,11 +4,14 @@ from discord.ext import commands, tasks
 import aiohttp
 from aiohttp import ClientOSError
 import sys
+import os
 import asyncio
 import time
 import math
 import pymongo
 import DiscordUtils
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 
 class Ranking(commands.Cog):
@@ -79,7 +82,7 @@ class Ranking(commands.Cog):
         self.leaderboards_to_db.start()
         self.tracked_players_to_db.start()
 
-    @tasks.loop(days=1)
+    @tasks.loop(minutes=1)
     async def tracked_players_to_db(self):
         await self.bot.wait_until_ready()
         tracked_players = await self.get_list_of_tracked_players()
@@ -197,26 +200,90 @@ class Ranking(commands.Cog):
         if not tracked_player:
             return await ctx.send('Player not found')
 
-        embed = discord.Embed(
-            title=f'Recent 5 entries for {name}',
-            color=discord.Color.purple(),
-        )
         i = 0
-        while i < 5 and i < len(tracked_player['records']):
+        x = []
+        y = {}
+        while i < len(tracked_player['records']):
             record = tracked_player['records'][i]
             xp_values = []
+            total_xp = 0
             for mode in self.ranking_modes_2.keys():
                 mode_xp_tag = f'{mode}_xp'
                 if mode_xp_tag in record:
                     mode_xp = record[mode_xp_tag]
-                    xp_values.append(f'{mode}: {mode_xp:,}')
-            embed.add_field(
-                name=record['created'].strftime('%B %d %Y - %H:%M'),
-                value='\n'.join(xp_values)
-            )
-            i += 1
+                    if i == 0:
+                        y[mode] = []
+                    y[mode].append(mode_xp)
+                    total_xp += mode_xp
 
-        return await ctx.send(embed=embed)
+            x.append(record['created'])
+            # if i == 0:
+            #     y['total_xp'] = []
+
+            # y['total_xp'].append(total_xp)
+
+            i += 1
+        
+        fig, ax = plt.subplots()
+        for k, v in y.items():
+            ax.plot(x, v, label=k)
+
+        ax_pos = ax.get_position()
+        ax.legend(loc='upper right')
+        # ax.set_ylim([0, self.level_table[-2]])
+        plt.title(f'XP over Time for {name}')
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        plt.gcf().autofmt_xdate()
+        curr_time = datetime.now().strftime("%Y%m%d-%H%M%S")
+        filename = f'{name}-{curr_time}.png'
+        fig.savefig(filename)
+        plt.close(fig)
+        await ctx.send(file=discord.File(filename))
+        os.remove(filename)
+    
+    @commands.command(aliases=['tpim'])
+    async def tracked_player_info_mode(self, ctx, mode='melee', *, name=None):
+        if name is None:
+            return await ctx.send('Must give name to get info for')
+
+        player_info = await self.get_page_info(f'{self.bot.leaderboards_api_url}/players/name/{name}')
+        if not player_info:
+            return await ctx.send('Player not found')
+
+        tracked_player = await self.bot.db.tracked_players.find_one(
+            {'id': player_info['id']})
+        if not tracked_player:
+            return await ctx.send('Player not found')
+
+        i = 0
+        x = []
+        y = []
+        mode_xp_tag = f'{mode}_xp'
+        while i < len(tracked_player['records']):
+            record = tracked_player['records'][i]
+            xp_values = []
+            if mode_xp_tag in record:
+                mode_xp = record[mode_xp_tag]
+                y.append(mode_xp)
+
+            x.append(record['created'])
+
+            i += 1
+        
+        fig, ax = plt.subplots()
+        ax.plot(x, y)
+        ax_pos = ax.get_position()
+        ax.legend(loc='upper right')
+        # ax.set_ylim([0, self.level_table[-2]])
+        plt.title(f'XP over Time for {name} - {mode}')
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        plt.gcf().autofmt_xdate()
+        curr_time = datetime.now().strftime("%Y%m%d-%H%M%S")
+        filename = f'{name}-{curr_time}.png'
+        fig.savefig(filename)
+        plt.close(fig)
+        await ctx.send(file=discord.File(filename))
+        os.remove(filename)
 
     @tasks.loop(hours=24)
     async def leaderboards_to_db(self):
