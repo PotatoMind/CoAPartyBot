@@ -72,14 +72,14 @@ class Ranking(commands.Cog):
         self.player_lock = asyncio.Lock()
         self.session = aiohttp.ClientSession()
         self.blacklist_file = 'blacklist.txt'
-        self.tracking_change_threshold = 0.01
+        self.tracking_change_min_xp = 10000
         self.tracking_days_after_removal_check = 30
         self.check_pages.start()
         self.clear_old_cache.start()
         self.leaderboards_to_db.start()
         self.tracked_players_to_db.start()
 
-    @tasks.loop(minutes=2)
+    @tasks.loop(days=1)
     async def tracked_players_to_db(self):
         await self.bot.wait_until_ready()
         tracked_players = await self.get_list_of_tracked_players()
@@ -129,15 +129,15 @@ class Ranking(commands.Cog):
                 for mode in self.ranking_modes_2.keys():
                     total_prev_xp += found_record[f'{mode}_xp']
 
-                xp_change_ratio = abs(
-                    (tracked_player['total_xp'] - total_prev_xp) / total_prev_xp)
-                if xp_change_ratio < self.tracking_change_threshold:
+                xp_change = abs(tracked_player['total_xp'] - total_prev_xp)
+                if xp_change < self.tracking_change_min_xp:
                     tracked_player['track'] = False
+
+                tracked_player['last_checked'] = curr_time
 
             if tracked_player['track']:
                 tracked_players.append(tracked_player)
 
-            tracked_player['last_checked'] = curr_time
             await self.bot.db.tracked_players.replace_one({'id': player_id}, tracked_player)
 
         return tracked_players
@@ -168,6 +168,7 @@ class Ranking(commands.Cog):
                 return await ctx.send('Player already being tracked')
             else:
                 tracked_player['track'] = True
+                tracked_player['last_checked'] = datetime.utcnow()
                 await self.tracked_player_to_db(tracked_player, player_info)
         else:
             tracked_player = {
