@@ -1,7 +1,7 @@
 aiohttp==3.7.4
 discord.py==1.7.3
 DiscordUtils==1.3.4
-numpy==1.18.3
+numpy==1.22.0
 psutil==5.6.6
 textdistance==4.2.0
 requests==2.25.1
