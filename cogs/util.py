@@ -129,6 +129,6 @@ class Util(commands.Cog):
         days, hours = divmod(hours, 24)
         return days, hours, minutes, seconds
 
-def setup(bot):
-    bot.add_cog(Util(bot))
+async def setup(bot):
+    await bot.add_cog(Util(bot))
     print('Loaded Utils')

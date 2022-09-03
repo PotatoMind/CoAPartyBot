@@ -3,7 +3,7 @@ version: "3.9"
 services:
   bot:
     build: .
-    command: python -u bot.py
+    command: poetry run python bot.py
     volumes:
       - .:/app
     depends_on:

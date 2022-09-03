@@ -149,6 +149,6 @@ class Wiki(commands.Cog):
                 page_ranks.append((page['title'], (levenstein_distance + substr_distance)/2))
         return page_ranks
 
-def setup(bot):
-    bot.add_cog(Wiki(bot))
+async def setup(bot):
+    await bot.add_cog(Wiki(bot))
     print('Loaded Wiki')
