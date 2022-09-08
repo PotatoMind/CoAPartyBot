@@ -303,6 +303,7 @@ class Ranking(commands.Cog):
         max_page = await self.get_max_page(mode, lw)
         lw_tag = f'{self.lone_wolf_tag}={1 if lw else 0}'
         page = 0
+        total_db = self.bot.db.lw_totals if lw else self.bot.db.totals
         while page < max_page and page < self.max_db_pages:
             if page % 1000 == 0:
                 print(f'Saving leaderboards to db, {mode}: {page} | LW: {lw}')
@@ -316,7 +317,7 @@ class Ranking(commands.Cog):
                 player_level = self.get_level(player['xp'])
 
                 async with self.player_lock:
-                    player_info = await self.bot.db.totals.find_one({'name': player_name_lower})
+                    player_info = await total_db.find_one({'name': player_name_lower})
                     if not player_info:
                         player_info = {
                             'name': player_name_lower,
@@ -356,10 +357,7 @@ class Ranking(commands.Cog):
                         player_guild_info['average_level'] = player_guild_info['total_level'] // player_guild_info['num_players']
                         await self.bot.db.guilds.replace_one({'name': player_guild_tag}, player_guild_info, upsert=True)
 
-                    if lw:
-                        await self.bot.db.lw_totals.replace_one({'name': player_name_lower}, player_info, upsert=True)
-                    else:
-                        await self.bot.db.totals.replace_one({'name': player_name_lower}, player_info, upsert=True)
+                    await total_db.replace_one({'name': player_name_lower}, player_info, upsert=True)
             page += 1
         return True
 
