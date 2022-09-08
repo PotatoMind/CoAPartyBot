@@ -12,6 +12,7 @@ import pymongo
 import DiscordUtils
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from pathlib import Path
 
 
 class Ranking(commands.Cog):
@@ -19,6 +20,9 @@ class Ranking(commands.Cog):
         self.bot = bot
         self.url = 'https://curseofaros.com'
         self.lone_wolf_tag = 'lw'
+        self.lone_wolf_icon = Path('lonewolf-icon.png')
+        self.lone_wolf_discord_file = discord.File(self.lone_wolf_icon, filename=self.lone_wolf_icon.name)
+        self.lone_wolf_icon_url = f'attachment://{self.lone_wolf_icon.name}'
         self.ranking_modes = {
             'melee': 'highscores-melee',
             'magic': 'highscores-magic',
@@ -777,10 +781,8 @@ XP: {p["xp"]:,}
             embed.color = discord.Color.red()
             print(f'{name} not found')
             return await msg.edit(embed=embed)
-
-        embed.title = f'Rank info for {player_info["name"]}'
-        if await self.check_if_player_lone_wolf(name):
-            embed.title = f'{embed.title} (LW)'
+        
+        embed.title = ''
         embed.color = discord.Color.purple()
         name = name.lower()
         total_xp = 0
@@ -804,7 +806,12 @@ XP: {p["xp"]:,}
             embed.set_footer(text=footer_text)
 
         print(f'Finished rank search for {name}')
-        return await msg.edit(embed=embed)
+        if await self.check_if_player_lone_wolf(name):
+            embed.set_author(name=player_info['name'], icon_url=self.lone_wolf_icon_url) 
+            return await msg.edit(attachments=[self.lone_wolf_discord_file], embed=embed)
+        else:
+            embed.set_author(name=player_info['name'])
+            return await msg.edit(embed=embed)
 
     @commands.command(aliases=['rl'])
     async def rankings_link(self, ctx, *, name):
