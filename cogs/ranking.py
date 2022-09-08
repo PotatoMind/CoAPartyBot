@@ -18,6 +18,7 @@ class Ranking(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.url = 'https://curseofaros.com'
+        self.lone_wolf_tag = 'lw'
         self.ranking_modes = {
             'melee': 'highscores-melee',
             'magic': 'highscores-magic',
@@ -289,21 +290,23 @@ class Ranking(commands.Cog):
     async def leaderboards_to_db(self):
         await self.bot.wait_until_ready()
         await self.bot.db.totals.drop()
+        await self.bot.db.lw_totals.drop()
         await self.bot.db.guilds.drop()
         tasks = [self.leaderboards_to_db_task(
-            mode, resource) for mode, resource in self.ranking_modes.items()]
+            mode, resource, lw) for mode, resource in self.ranking_modes.items() for lw in [True, False]]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         print(results)
 
-    async def leaderboards_to_db_task(self, mode, resource):
+    async def leaderboards_to_db_task(self, mode, resource, lw=False):
         mode_level_key = f'{mode}_level'
         mode_xp_key = f'{mode}_xp'
-        max_page = await self.get_max_page(mode)
+        max_page = await self.get_max_page(mode, lw)
+        lw_tag = f'{self.lone_wolf_tag}={1 if lw else 0}'
         page = 0
         while page < max_page and page < self.max_db_pages:
             if page % 1000 == 0:
-                print(f'Saving leaderboards to db, {mode}: {page}')
-            json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={page}')
+                print(f'Saving leaderboards to db, {mode}: {page} | LW: {lw}')
+            json_data = await self.get_page_info(f'{self.url}/{resource}.json?{lw_tag}&p={page}')
             for player in json_data:
                 player_name_lower = player['name'].lower()
                 player_name_lower_split = player_name_lower.split()
@@ -330,7 +333,7 @@ class Ranking(commands.Cog):
                     player_info[mode_level_key] = player_level
                     player_info[mode_xp_key] = player['xp']
 
-                    if player_guild_tag:
+                    if player_guild_tag and not lw:
                         player_guild_info = await self.bot.db.guilds.find_one({'name': player_guild_tag})
                         if not player_guild_info:
                             player_guild_info = {
@@ -353,23 +356,28 @@ class Ranking(commands.Cog):
                         player_guild_info['average_level'] = player_guild_info['total_level'] // player_guild_info['num_players']
                         await self.bot.db.guilds.replace_one({'name': player_guild_tag}, player_guild_info, upsert=True)
 
-                    await self.bot.db.totals.replace_one({'name': player_name_lower}, player_info, upsert=True)
+                    if lw:
+                        await self.bot.db.lw_totals.replace_one({'name': player_name_lower}, player_info, upsert=True)
+                    else:
+                        await self.bot.db.totals.replace_one({'name': player_name_lower}, player_info, upsert=True)
             page += 1
         return True
 
     @commands.command(aliases=['rt'])
-    async def rankings_total(self, ctx, _type='xp', start=1, size=20):
+    async def rankings_total(self, ctx, _type='xp', lw=False, start=1, size=20):
         if _type != 'xp' and _type != 'level':
             await ctx.send('Could not find type.\nAcceptable types: xp, level')
         elif start < 1 or size > 50:
             await ctx.send('Bad index range. Make sure start is > 0 and size is < 50')
         else:
-            player_infos = self.bot.db.totals.find()
+            player_infos = self.bot.db.lw_totals.find() if lw else self.bot.db.totals.find()
             player_infos.sort(f'total_{_type}', pymongo.DESCENDING).skip(
                 start-1).limit(size)
 
             embed = discord.Embed(
                 title=f'Total Player Rankings - Sorted by {_type.title()}')
+            if lw:
+                embed.title = f'{embed.title} (LW)'
             i = 0
             async for player_info in player_infos:
                 value = f'''
@@ -381,10 +389,22 @@ Total Level: {player_info["total_level"]:,}
                 i += 1
 
             return await ctx.send(embed=embed)
+    
+    async def check_if_player_lone_wolf(self, name):
+        name = name.lower()
+        return await self.bot.db.lw_totals.find_one({'name': name}, {'_id': False}) != None
 
     async def get_player_total_rank(self, name, _type):
         name = name.lower()
-        player_infos = self.bot.db.totals.find()
+
+        player_infos = None
+        if await self.bot.db.totals.find_one({'name': name}, {'_id': False}):
+            player_infos = self.bot.db.totals.find()
+        elif await self.bot.db.lw_totals.find_one({'name': name}, {'_id': False}):
+            player_infos = self.bot.db.lw_totals.find()
+        else:
+            return None
+
         player_infos.sort(f'total_{_type}', pymongo.DESCENDING)
         player_rank = 1
         async for p in player_infos:
@@ -411,12 +431,16 @@ Total Level: {player_info["total_level"]:,}
     async def check_pages(self):
         await self.bot.wait_until_ready()
         max_pages = {mode: 0 for mode in self.ranking_modes.keys()}
-
         for mode, resource in self.ranking_modes.items():
             max_pages[mode] = await self.check_pages_helper(resource)
-
         self.bot.max_page_cache.hmset('max_pages', max_pages)
         print(f'Saved max pages {max_pages}')
+
+        lw_max_pages = {mode: 0 for mode in self.ranking_modes.keys()}
+        for mode, resource in self.ranking_modes.items():
+            lw_max_pages[mode] = await self.check_pages_helper(resource, True)
+        self.bot.max_page_cache.hmset('lw_max_pages', lw_max_pages)
+        print(f'Saved lone wolf max pages {lw_max_pages}')
 
     async def get_page_info(self, link, tries=0):
         if tries > self.total_connection_retries:
@@ -432,20 +456,22 @@ Total Level: {player_info["total_level"]:,}
         else:
             return data
 
-    async def check_pages_helper(self, resource):
+    async def check_pages_helper(self, resource, lw=False):
         index_1 = 1
         index_2 = 1
 
-        req = await self.get_page_info(f'{self.url}/{resource}.json?p={index_1}')
+        lw_tag = f'{self.lone_wolf_tag}={1 if lw else 0}'
+
+        req = await self.get_page_info(f'{self.url}/{resource}.json?{lw_tag}&p={index_1}')
         while req:
             index_2 = index_1
             index_1 = index_1 * 2
-            req = await self.get_page_info(f'{self.url}/{resource}.json?p={index_1}')
+            req = await self.get_page_info(f'{self.url}/{resource}.json?{lw_tag}&p={index_1}')
 
         mid = 0
         while index_1 != index_2:
             mid = index_1 + (index_2 - index_1) // 2
-            req = await self.get_page_info(f'{self.url}/{resource}.json?p={mid}')
+            req = await self.get_page_info(f'{self.url}/{resource}.json?{lw_tag}&p={mid}')
             if req:
                 index_2 = mid + 1
             else:
@@ -453,16 +479,18 @@ Total Level: {player_info["total_level"]:,}
 
         return index_1 - 1
 
-    async def level_binary_search(self, level, mode):
+    async def level_binary_search(self, level, mode, lw=False):
         resource = self.ranking_modes[mode]
 
+        lw_tag = f'{self.lone_wolf_tag}={1 if lw else 0}'
+
         low = 0
-        high = await self.get_max_page(mode)
+        high = await self.get_max_page(mode, lw)
 
         while low <= high:
             mid = (low + high) // 2
 
-            data = await self.get_page_info(f'{self.url}/{resource}.json?p={mid}')
+            data = await self.get_page_info(f'{self.url}/{resource}.json?{lw_tag}&p={mid}')
             last_level = self.get_level(data[0]['xp'])
 
             if last_level > level:
@@ -474,8 +502,8 @@ Total Level: {player_info["total_level"]:,}
 
         return high
 
-    async def get_max_page(self, mode):
-        max_pages = self.bot.max_page_cache.hgetall('max_pages')
+    async def get_max_page(self, mode, lw=False):
+        max_pages = self.bot.max_page_cache.hgetall('lw_max_pages') if lw else self.bot.max_page_cache.hgetall('max_pages')
         if max_pages:
             return int(max_pages[mode.encode()].decode())
         else:
@@ -501,7 +529,7 @@ Total Level: {player_info["total_level"]:,}
         return await self.bot.db.players.replace_one({'name': name}, player_info, upsert=True)
 
     @commands.command(aliases=['pol'])
-    async def players_over_level(self, ctx, level=80, mode=None):
+    async def players_over_level(self, ctx, level=80, mode=None, lw=False):
         if mode and mode not in self.ranking_modes:
             return await ctx.send(f'Could not find mode.\nAcceptable Modes: {", ".join([m for m in self.ranking_modes.keys()])}')
 
@@ -513,13 +541,15 @@ Total Level: {player_info["total_level"]:,}
         else:
             search_resources = list(self.ranking_modes.values())
 
+        lw_tag = f'{self.lone_wolf_tag}={1 if lw else 0}'
+
         embed_title = f'Players above Level {level} in {mode.capitalize() if mode else "ALL"}'
         embed = discord.Embed(title=f'Searching for {embed_title}')
         msg = await ctx.send(embed=embed)
 
         player_counts = {}
         for resource in search_resources:
-            data = await self.get_page_info(f'{self.url}/{resource}.json?p=0')
+            data = await self.get_page_info(f'{self.url}/{resource}.json?{lw_tag}&p=0')
             page = 1
             while data and self.get_level(data[0]['xp']) >= level:
                 for player in data:
@@ -531,7 +561,7 @@ Total Level: {player_info["total_level"]:,}
                             count, total_level = player_counts[player['name']]
                             player_counts[player['name']] = (
                                 count + 1, total_level + player_level)
-                data = await self.get_page_info(f'{self.url}/{resource}.json?p={page}')
+                data = await self.get_page_info(f'{self.url}/{resource}.json?{lw_tag}&p={page}')
                 page += 1
 
         filtered_player_levels = {
@@ -681,12 +711,13 @@ Average Levels Per Player: {guild_info["average_level"]:,}
             return await ctx.send(embed=embed)
 
     @commands.command()
-    async def rankings(self, ctx, mode='melee', page='1'):
+    async def rankings(self, ctx, mode='melee', page='1', lw=False):
         if mode not in self.ranking_modes:
             await ctx.send(f'Could not find mode.\nAcceptable Modes: {", ".join([m for m in self.ranking_modes.keys()])}')
         else:
             resource = self.ranking_modes[mode]
-            json_data = await self.get_page_info(f'{self.url}/{resource}.json?p={int(page)-1}')
+            lw_tag = f'{self.lone_wolf_tag}={1 if lw else 0}'
+            json_data = await self.get_page_info(f'{self.url}/{resource}.json?{lw_tag}&p={int(page)-1}')
             if not json_data:
                 return await ctx.send(f'Ran out of pages!')
 
@@ -750,6 +781,8 @@ XP: {p["xp"]:,}
             return await msg.edit(embed=embed)
 
         embed.title = f'Rank info for {player_info["name"]}'
+        if await self.check_if_player_lone_wolf(name):
+            embed.title = f'{embed.title} (LW)'
         embed.color = discord.Color.purple()
         name = name.lower()
         total_xp = 0
